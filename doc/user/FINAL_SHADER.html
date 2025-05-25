@@ -17,17 +17,17 @@
 
     <span class="kt">vec3</span> <span class="n">sum</span> <span class="o">=</span> <span class="kt">vec3</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
 
-	<span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="o">-</span><span class="n">samples</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="n">samples</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="o">-</span><span class="n">samples</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="n">samples</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
     <span class="p">{</span>
-		<span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="o">-</span><span class="n">samples</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;=</span> <span class="n">samples</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span>
+        <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="o">-</span><span class="n">samples</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;=</span> <span class="n">samples</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span>
         <span class="p">{</span>
-			<span class="n">sum</span> <span class="o">+=</span> <span class="n">texture</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">uv</span> <span class="o">+</span> <span class="kt">vec2</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)</span> <span class="o">*</span> <span class="n">step</span><span class="p">).</span><span class="n">rgb</span><span class="p">;</span>
-		<span class="p">}</span>
+            <span class="n">sum</span> <span class="o">+=</span> <span class="n">texture</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">uv</span> <span class="o">+</span> <span class="kt">vec2</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)</span> <span class="o">*</span> <span class="n">step</span><span class="p">).</span><span class="n">rgb</span><span class="p">;</span>
+        <span class="p">}</span>
     <span class="p">}</span>
 
     <span class="kt">float</span> <span class="n">d</span> <span class="o">=</span> <span class="mi">1</span><span class="p">.</span><span class="mi">0</span> <span class="o">+</span> <span class="mi">2</span><span class="p">.</span><span class="mi">0</span> <span class="o">*</span> <span class="kt">float</span><span class="p">(</span><span class="n">samples</span><span class="p">);</span>
     <span class="n">sum</span> <span class="o">/=</span> <span class="n">d</span> <span class="o">*</span> <span class="n">d</span><span class="p">;</span>
 
-	<span class="k">return</span> <span class="kt">vec4</span><span class="p">(</span><span class="n">sum</span><span class="p">,</span> <span class="mi">1</span><span class="p">.</span><span class="mi">0</span><span class="p">);</span>
+    <span class="k">return</span> <span class="kt">vec4</span><span class="p">(</span><span class="n">sum</span><span class="p">,</span> <span class="mi">1</span><span class="p">.</span><span class="mi">0</span><span class="p">);</span>
 <span class="p">}</span>
 </code></pre></div></div> </main> </div> </div> <div class="search-overlay"></div> </div> </body> </html>
