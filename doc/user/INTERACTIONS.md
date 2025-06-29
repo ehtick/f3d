@@ -30,7 +30,7 @@ See the [coloring cycle](#cycling-coloring) section for more info.
 
 Other options can be toggled directly by pressing the following hotkeys:
 
-- <kbd>W</kbd>: cycle animations.
+- <kbd>W</kbd>: [cycle animations](ANIMATIONS.md#cycling-animations).
 - <kbd>B</kbd>: display of the scalar bar, only when coloring and not using direct scalars.
 - <kbd>V</kbd>: volume rendering, forces coloring.
 - <kbd>I</kbd>: opacity function inversion during volume rendering.
@@ -76,6 +76,7 @@ Other hotkeys and interactions are available:
 - <kbd>Esc</kbd>: display the console or hide console/minimal console.
 - <kbd>:</kbd>: display the minimal console
 - <kbd>Space</kbd>: play the animation if any.
+- <kbd>Shift</kbd> + <kbd>V</kbd>: cycle between verbosity levels.
 - <kbd>&larr;</kbd>: load the previous file if any and reset the camera.
 - <kbd>&rarr;</kbd>: load the next file if any and reset the camera.
 - <kbd>&uarr;</kbd>: reload the currently loaded files.
