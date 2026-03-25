@@ -58,8 +58,8 @@ eg: `azimuth_camera 120`.
 
 `print_options_info`: A specific command to print libf3d options that have a value, No argument.
 
-`set_camera front/top/right/isometric`: A specific command to position the camera in the specified location relative to the model.
-Supports `front`, `top`, `right`, `isometric` arguments. eg: `set_camera top`.
+`set_camera front/top/right/back/bottom/left/isometric`: A specific command to position the camera in the specified location relative to the model.
+Supports `front`, `top`, `right`, `back`, `bottom`, `left`, `isometric` arguments. eg: `set_camera top`.
 
 `toggle_volume_rendering`: A specific command to toggle `model.volume.enable` and print coloring information. No argument.
 

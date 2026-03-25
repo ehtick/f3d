@@ -186,6 +186,9 @@ public:
     VT_FRONT,
     VT_RIGHT,
     VT_TOP,
+    VT_BACK,
+    VT_BOTTOM,
+    VT_LEFT,
     VT_ISOMETRIC
   };
 
@@ -203,12 +206,22 @@ public:
       case ViewType::VT_FRONT:
         axis = { 0, +1, 0 };
         break;
+      case ViewType::VT_BACK:
+        axis = { 0, -1, 0 };
+        break;
       case ViewType::VT_RIGHT:
         axis = { +1, 0, 0 };
+        break;
+      case ViewType::VT_LEFT:
+        axis = { -1, 0, 0 };
         break;
       case ViewType::VT_TOP:
         axis = { 0, 0, +1 };
         up = { 0, -1, 0 };
+        break;
+      case ViewType::VT_BOTTOM:
+        axis = { 0, 0, -1 };
+        up = { 0, 1, 0 };
         break;
       case ViewType::VT_ISOMETRIC:
         axis = { -1, +1, +1 };
@@ -1226,6 +1239,21 @@ interactor& interactor_impl::initCommands()
         this->Internals->SetViewOrbit(internals::ViewType::VT_RIGHT);
         this->Internals->Style->ResetTemporaryUp();
       }
+      else if (type == "back")
+      {
+        this->Internals->SetViewOrbit(internals::ViewType::VT_BACK);
+        this->Internals->Style->ResetTemporaryUp();
+      }
+      else if (type == "bottom")
+      {
+        this->Internals->SetViewOrbit(internals::ViewType::VT_BOTTOM);
+        this->Internals->Style->ResetTemporaryUp();
+      }
+      else if (type == "left")
+      {
+        this->Internals->SetViewOrbit(internals::ViewType::VT_LEFT);
+        this->Internals->Style->ResetTemporaryUp();
+      }
       else if (type == "isometric")
       {
         this->Internals->SetViewOrbit(internals::ViewType::VT_ISOMETRIC);
@@ -1237,10 +1265,10 @@ interactor& interactor_impl::initCommands()
           std::string("Command: set_camera arg:\"") + std::string(type) + "\" is not recognized.");
       }
     },
-    command_documentation_t{
-      "set_camera front/top/right/isometric", "position the camera in the specified location" },
+    command_documentation_t{ "set_camera front/top/right/back/bottom/left/isometric",
+      "position the camera in the specified location" },
     std::bind(complNames, std::placeholders::_1,
-      std::vector<std::string>{ "front", "top", "right", "isometric" }));
+      std::vector<std::string>{ "front", "top", "right", "back", "bottom", "left", "isometric" }));
 
   this->addCommand(
     "toggle_volume_rendering",
