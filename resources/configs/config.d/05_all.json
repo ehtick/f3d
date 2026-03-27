@@ -13,7 +13,8 @@
       "blending": "ddp",
       "animation-progress": true,
       "remove-empty-file-groups": true,
-      "dpi-aware": true
+      "dpi-aware": true,
+      "notifications": true
     }
   }
 ]

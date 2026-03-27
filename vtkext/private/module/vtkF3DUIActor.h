@@ -11,8 +11,10 @@
 #include <vtkProp.h>
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <deque>
+#include <map>
 
 class vtkOpenGLRenderWindow;
 
@@ -36,6 +38,14 @@ public:
 
   using CheatSheetTuple = std::tuple<std::string, std::string, std::string, CheatSheetBindingType>;
   using CheatSheetGroup = std::pair<std::string, std::vector<CheatSheetTuple>>;
+
+  struct Notification
+  {
+    std::string desc;
+    std::string value;
+    std::string bind;
+    double stopTime;
+  };
 
   /**
    * Initialize the UI actor resources
@@ -149,6 +159,18 @@ public:
   void SetFpsCounterVisibility(bool show);
 
   /**
+   * Set the notification visibility
+   * False by default
+   */
+  void SetNotificationVisibility(bool show);
+
+  /**
+   * Set the bindings visibility in notifications
+   * False by default
+   */
+  void SetBindingsVisibility(bool show);
+
+  /**
    * Updates the fps value
    * 0 by default
    */
@@ -186,6 +208,12 @@ public:
   virtual void SetDeltaTime(double)
   {
   }
+
+  /**
+   * Add notification info to deque
+   */
+  void AddNotification(
+    const std::string& desc, const std::string& value, const std::string& bind, double stopTime);
 
 protected:
   vtkF3DUIActor();
@@ -267,6 +295,14 @@ protected:
   virtual void RenderConsoleBadge()
   {
   }
+
+  /**
+   * Render the notifications
+   */
+  virtual void RenderNotifications(double vtkNotUsed(currenTime))
+  {
+  }
+
   bool DropZoneLogoVisible = false;
   bool DropZoneVisible = false;
   std::string DropText = "";
@@ -308,6 +344,10 @@ protected:
   std::array<double, 3> FontColor = { 1.0, 1.0, 1.0 };
 
   double BackdropOpacity = 0.9;
+
+  bool NotificationVisible = false;
+  bool BindingsVisible = false;
+  std::deque<Notification> Notifications;
 
 private:
   vtkF3DUIActor(const vtkF3DUIActor&) = delete;

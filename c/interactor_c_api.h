@@ -214,10 +214,12 @@ extern "C"
    * @param commands Array of command strings.
    * @param command_count Number of commands.
    * @param group Optional group name (can be NULL).
+   * @param type Optional binding type.
+   * @param notify Notify when the binding is triggered.
    */
   F3D_EXPORT void f3d_interactor_add_binding(f3d_interactor_t* interactor,
-    const f3d_interaction_bind_t* bind, const char** commands, int command_count,
-    const char* group);
+    const f3d_interaction_bind_t* bind, const char** commands, int command_count, const char* group,
+    f3d_interactor_binding_type_t type, int notify);
 
   /**
    * @brief Remove a binding for the provided bind.
@@ -481,6 +483,17 @@ extern "C"
    * @param interactor Interactor handle.
    */
   F3D_EXPORT void f3d_interactor_request_stop(f3d_interactor_t* interactor);
+
+  /**
+   * @brief Trigger a notification at the bottom left of viewport.
+   *
+   * @param interactor Interactor handle.
+   * @param desc Description text.
+   * @param value Value text follow after description.
+   * @param duration Duration of notification in seconds.
+   */
+  F3D_EXPORT void f3d_interactor_trigger_notification(
+    f3d_interactor_t* interactor, const char* desc, const char* value, double duration);
 
   /**
    * @brief Free a string array returned by interactor functions.

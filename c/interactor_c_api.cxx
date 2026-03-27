@@ -456,7 +456,8 @@ void f3d_interactor_init_bindings(f3d_interactor_t* interactor)
 
 //----------------------------------------------------------------------------
 void f3d_interactor_add_binding(f3d_interactor_t* interactor, const f3d_interaction_bind_t* bind,
-  const char** commands, int command_count, const char* group)
+  const char** commands, int command_count, const char* group, f3d_interactor_binding_type_t type,
+  int notify)
 {
   if (!interactor || !bind || !commands || command_count <= 0)
   {
@@ -478,7 +479,8 @@ void f3d_interactor_add_binding(f3d_interactor_t* interactor, const f3d_interact
 
   std::string cpp_group = group ? group : "";
 
-  cpp_interactor->addBinding(cpp_bind, cpp_commands, cpp_group);
+  cpp_interactor->addBinding(cpp_bind, cpp_commands, cpp_group, nullptr,
+    static_cast<f3d::interactor::BindingType>(type), notify != 0);
 }
 
 //----------------------------------------------------------------------------
@@ -633,6 +635,19 @@ f3d_interactor_binding_type_t f3d_interactor_get_binding_type(
   cpp_bind.inter = bind->inter;
   f3d::interactor::BindingType cpp_type = cpp_interactor->getBindingType(cpp_bind);
   return static_cast<f3d_interactor_binding_type_t>(cpp_type);
+}
+
+//----------------------------------------------------------------------------
+void f3d_interactor_trigger_notification(
+  f3d_interactor_t* interactor, const char* desc, const char* value, double duration)
+{
+  if (!interactor || !desc)
+  {
+    return;
+  }
+
+  f3d::interactor* cpp_interactor = reinterpret_cast<f3d::interactor*>(interactor);
+  cpp_interactor->triggerNotification(desc, value, duration);
 }
 
 //----------------------------------------------------------------------------

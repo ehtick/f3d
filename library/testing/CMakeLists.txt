@@ -43,6 +43,13 @@ if(F3D_MODULE_UI)
     TestSDKMultiOptions.cxx
     TestSDKTriggerInteractions.cxx
     )
+  
+  # This test uses tone mapping which changed after 9.3.20240729
+  if(VTK_VERSION VERSION_GREATER_EQUAL 9.5.20240609)
+    list(APPEND libf3dSDKTests_list
+      TestSDKNotification.cxx
+      )
+  endif()
 
   # Needs https://gitlab.kitware.com/vtk/vtk/-/merge_requests/12489
   if(VTK_VERSION VERSION_GREATER_EQUAL 9.5.20251001)

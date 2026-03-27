@@ -65,6 +65,7 @@ public:
     std::vector<std::string> CommandVector;
     documentation_callback_t DocumentationCallback;
     BindingType Type;
+    bool Notify;
   };
 
   struct CommandCallbacks
@@ -519,7 +520,11 @@ public:
 
     if (commandsIt != this->Bindings.end())
     {
-      for (const std::string& command : commandsIt->second.CommandVector)
+      // Copy by value: triggerCommand may call initBindings() which clears the Bindings map,
+      // invalidating any references/iterators into it.
+      const BindingCommands binding = commandsIt->second;
+
+      for (const std::string& command : binding.CommandVector)
       {
         std::string commandWithArgs = command;
         if (!argsString.empty())
@@ -538,6 +543,17 @@ public:
           log::error(
             "Interaction: error running command: \"" + commandWithArgs + "\": " + ex.what());
         }
+      }
+
+      if (binding.Notify && binding.DocumentationCallback)
+      {
+        // trigger notification
+        vtkRenderWindow* renWin = this->Window.GetRenderWindow();
+        vtkF3DRenderer* ren =
+          vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
+
+        auto [desc, value] = binding.DocumentationCallback();
+        ren->AddNotification(desc, value, bind.format(), 3.0);
       }
     }
 
@@ -637,6 +653,7 @@ public:
     vtkRenderWindow* renWin = this->Window.GetRenderWindow();
     vtkF3DRenderer* ren = vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
     ren->SetUIDeltaTime(deltaTime);
+    ren->SetTotalTime(ren->GetTotalTime() + deltaTime);
 
     // Determine if we need a full render or just a UI render
     // At the moment, only TAA requires a full render each frame
@@ -1729,15 +1746,16 @@ interactor& interactor_impl::initBindings()
   this->addBinding({mod_t::CTRL, "Y"}, "set scene.up_direction +Y", "Scene", std::bind(docStr, "Set scene up direction to +Y"));
   this->addBinding({mod_t::CTRL, "Z"}, "set scene.up_direction +Z", "Scene", std::bind(docStr, "Set scene up direction to +Z"));
 #if F3D_MODULE_UI
-  this->addBinding({mod_t::NONE, "H"}, "toggle ui.cheatsheet", "Others", std::bind(docStr, "Cheatsheet"));
-  this->addBinding({mod_t::NONE, "Escape"}, "toggle ui.console", "Others", std::bind(docStr, "Console"));
-  this->addBinding({mod_t::ANY, "Colon"}, "toggle ui.minimal_console", "Others", std::bind(docStr, "Minimal console"));
+  this->addBinding({mod_t::NONE, "H"}, "toggle ui.cheatsheet", "Others", std::bind(docStr, "Cheatsheet"), f3d::interactor::BindingType::OTHER, true);
+  this->addBinding({mod_t::NONE, "Escape"}, "toggle ui.console", "Others", std::bind(docStr, "Console"), f3d::interactor::BindingType::OTHER, true);
+  this->addBinding({mod_t::ANY, "Colon"}, "toggle ui.minimal_console", "Others", std::bind(docStr, "Minimal console"), f3d::interactor::BindingType::OTHER, true);
+  this->addBinding({mod_t::CTRL, "K"}, "toggle ui.notifications.enable", "Others", std::bind(docTgl, "Notifications", std::cref(opts.ui.notifications.enable)), f3d::interactor::BindingType::TOGGLE);
 #endif
-  this->addBinding({mod_t::CTRL, "Q"}, "stop_interactor", "Others", std::bind(docStr, "Stop the interactor"));
+  this->addBinding({mod_t::CTRL, "Q"}, "stop_interactor", "Others", std::bind(docStr, "Stop the interactor"), f3d::interactor::BindingType::OTHER, true);
   this->addBinding({mod_t::NONE, "Return"}, "reset_camera", "Others", std::bind(docStr, "Reset camera to initial parameters"));
   this->addBinding({mod_t::NONE, "Space"}, "toggle_animation", "Others", std::bind(docStr, "Play/Pause animation if any"));
   this->addBinding({mod_t::CTRL_SHIFT, "Space"}, "toggle_animation_backward", "Others", std::bind(docStr, "Play/Pause animation backward if any"));
-  this->addBinding({mod_t::NONE, "Drop"}, "add_files", "Others", std::bind(docStr, "Add files to the scene"));
+  this->addBinding({mod_t::NONE, "Drop"}, "add_files", "Others", std::bind(docStr, "Add files to the scene"), f3d::interactor::BindingType::OTHER, true);
   this->addBinding({mod_t::SHIFT, "V"}, "cycle_verbose_level", "Others", docVerbose, f3d::interactor::BindingType::CYCLIC);
   // clang-format on
 
@@ -1747,10 +1765,10 @@ interactor& interactor_impl::initBindings()
 //----------------------------------------------------------------------------
 interactor& interactor_impl::addBinding(const interaction_bind_t& bind,
   std::vector<std::string> commands, std::string group,
-  documentation_callback_t documentationCallback, BindingType type)
+  documentation_callback_t documentationCallback, BindingType type, bool notify)
 {
   const auto [it, success] = this->Internals->Bindings.insert(
-    { bind, { std::move(commands), std::move(documentationCallback), type } });
+    { bind, { std::move(commands), std::move(documentationCallback), type, notify } });
   if (!success)
   {
     throw interactor::already_exists_exception(
@@ -1772,10 +1790,10 @@ interactor& interactor_impl::addBinding(const interaction_bind_t& bind,
 
 //----------------------------------------------------------------------------
 interactor& interactor_impl::addBinding(const interaction_bind_t& bind, std::string command,
-  std::string group, documentation_callback_t documentationCallback, BindingType type)
+  std::string group, documentation_callback_t documentationCallback, BindingType type, bool notify)
 {
   return this->addBinding(bind, std::vector<std::string>{ std::move(command) }, std::move(group),
-    std::move(documentationCallback), type);
+    std::move(documentationCallback), type, notify);
 }
 
 //----------------------------------------------------------------------------
@@ -1864,6 +1882,21 @@ f3d::interactor::BindingType interactor_impl::getBindingType(const interaction_b
       std::string("Bind: ") + bind.format() + " does not exists");
   }
   return it->second.Type;
+}
+
+//----------------------------------------------------------------------------
+interactor& interactor_impl::triggerNotification(
+  std::string desc, std::string value, double duration)
+{
+  if (!desc.empty())
+  {
+    vtkRenderWindow* renWin = this->Internals->Window.GetRenderWindow();
+    vtkF3DRenderer* ren = vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
+
+    ren->AddNotification(desc, value, {}, duration);
+  }
+
+  return *this;
 }
 
 //----------------------------------------------------------------------------

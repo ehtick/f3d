@@ -1,8 +1,13 @@
 #include "vtkF3DUIActor.h"
 
+#include "vtkF3DRenderer.h"
+
 #include <vtkObjectFactory.h>
 #include <vtkOpenGLRenderWindow.h>
+#include <vtkRendererCollection.h>
 #include <vtkViewport.h>
+
+#include <algorithm>
 
 vtkObjectFactoryNewMacro(vtkF3DUIActor);
 
@@ -113,6 +118,18 @@ void vtkF3DUIActor::SetCheatSheet(const std::vector<CheatSheetGroup>& cheatsheet
 void vtkF3DUIActor::SetFpsCounterVisibility(bool show)
 {
   this->FpsCounterVisible = show;
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DUIActor::SetNotificationVisibility(bool show)
+{
+  this->NotificationVisible = show;
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DUIActor::SetBindingsVisibility(bool show)
+{
+  this->BindingsVisible = show;
 }
 
 //----------------------------------------------------------------------------
@@ -241,7 +258,30 @@ int vtkF3DUIActor::RenderOverlay(vtkViewport* vp)
     this->RenderFpsCounter();
   }
 
+  vtkF3DRenderer* ren = vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
+  assert(ren != nullptr);
+
+  double currentTime = ren->GetTotalTime();
+
+  // clear outdated notifications
+  while (!this->Notifications.empty() && currentTime >= this->Notifications.back().stopTime)
+  {
+    this->Notifications.pop_back();
+  }
+
+  if (this->NotificationVisible)
+  {
+    this->RenderNotifications(currentTime);
+  }
+
   this->EndFrame(renWin);
 
   return 1;
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DUIActor::AddNotification(
+  const std::string& desc, const std::string& value, const std::string& bind, double stopTime)
+{
+  this->Notifications.emplace_front(Notification{ desc, value, bind, stopTime });
 }

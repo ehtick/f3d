@@ -1986,6 +1986,18 @@ void vtkF3DRenderer::ShowArmature(bool show)
 }
 
 //----------------------------------------------------------------------------
+void vtkF3DRenderer::ShowNotification(bool show)
+{
+  this->UIActor->SetNotificationVisibility(show);
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DRenderer::ShowBindings(bool show)
+{
+  this->UIActor->SetBindingsVisibility(show);
+}
+
+//----------------------------------------------------------------------------
 void vtkF3DRenderer::ShowEdge(const std::optional<bool>& show)
 {
   if (this->EdgeVisible != show)
@@ -3697,4 +3709,11 @@ void vtkF3DRenderer::SetUIDeltaTime(double time)
 void vtkF3DRenderer::SetConsoleBadgeEnabled(bool enabled)
 {
   this->UIActor->SetConsoleBadgeEnabled(enabled);
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DRenderer::AddNotification(
+  const std::string& desc, const std::string& value, const std::string& bind, double duration)
+{
+  this->UIActor->AddNotification(desc, value, bind, this->TotalTime + duration);
 }

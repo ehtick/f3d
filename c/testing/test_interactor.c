@@ -60,6 +60,8 @@ int test_interactor()
 
   f3d_interactor_trigger_event_loop(interactor, 0.016);
 
+  f3d_interactor_trigger_notification(interactor, "foo", "bar", 3.0);
+
   f3d_interactor_play_interaction(interactor, "/nonexistent.log", 1.0 / 30.0);
   f3d_interactor_record_interaction(interactor, "/tmp/test_interaction.log");
 
@@ -103,7 +105,7 @@ int test_interactor()
   (void)less1;
 
   const char* test_commands[] = { "test_action" };
-  f3d_interactor_add_binding(interactor, &bind, test_commands, 1, "test_group");
+  f3d_interactor_add_binding(interactor, &bind, test_commands, 1, "test_group", F3D_INTERACTOR_BINDING_CYCLIC, 1);
 
   int group_count = 0;
   char** groups = f3d_interactor_get_bind_groups(interactor, &group_count);

@@ -463,6 +463,7 @@ struct vtkF3DImguiActor::Internals
   SearchMode CurrentSearchMode = SearchMode::Description;
   bool SearchFocusRequested = false;
   float CheatSheetWidth = 0.f;
+  std::map<std::string, ImFont*> ExtraFonts;
 };
 
 namespace
@@ -521,11 +522,18 @@ void vtkF3DImguiActor::Initialize(vtkOpenGLRenderWindow* renWin)
     font = io.Fonts->AddFontFromMemoryTTF(
       const_cast<void*>(reinterpret_cast<const void*>(F3DFontBuffer)), sizeof(F3DFontBuffer),
       18 * this->FontScale, &fontConfig, ranges.Data);
+    ImFont* notiFont = io.Fonts->AddFontFromMemoryTTF(
+      const_cast<void*>(reinterpret_cast<const void*>(F3DFontBuffer)), sizeof(F3DFontBuffer),
+      18 * this->FontScale * .8f, &fontConfig, ranges.Data);
+    Pimpl->ExtraFonts["notiFont"] = notiFont;
   }
   else
   {
     font = io.Fonts->AddFontFromFileTTF(
       this->FontFile.c_str(), 18 * this->FontScale, &fontConfig, ranges.Data);
+    ImFont* notiFont = io.Fonts->AddFontFromFileTTF(
+      this->FontFile.c_str(), 18 * this->FontScale * .8f, &fontConfig, ranges.Data);
+    Pimpl->ExtraFonts["notiFont"] = notiFont;
   }
 
   io.Fonts->Build();
@@ -1195,4 +1203,146 @@ void vtkF3DImguiActor::SetDeltaTime(double time)
 {
   ImGuiIO& io = ImGui::GetIO();
   io.DeltaTime = time;
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DImguiActor::RenderNotifications(double currentTime)
+{
+  int index = 0;
+
+  for (const auto& [desc, value, bind, stopTime] : this->Notifications)
+  {
+    std::string description = desc;
+    if (!value.empty())
+    {
+      description += ':';
+    }
+
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+    // Mimic the style format in cheatsheet
+    ImGui::PushFont(Pimpl->ExtraFonts["notiFont"]);
+    constexpr float margin = F3DStyle::GetDefaultMargin();
+    ImVec2 descLineSize = ImGui::CalcTextSize(description.c_str());
+    ImVec2 valueLineSize = ImGui::CalcTextSize(value.c_str());
+    ImVec2 windowPadding = ImGui::GetStyle().WindowPadding;
+    const float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
+    // Increase line spacing a bit
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(itemSpacingX, 10.0f * this->FontScale));
+
+    float windowWidth = descLineSize.x + valueLineSize.x + windowPadding.x * 2.f;
+    windowWidth += value.empty() ? 0.f : itemSpacingX;
+
+    auto keys = ::SplitBindings(bind, '+');
+
+    if (this->BindingsVisible && !bind.empty())
+    {
+      windowWidth +=
+        std::accumulate(keys.begin(), keys.end(), 0.0f, [&](float sum, const std::string& key)
+          { return sum + this->CalcBadgeWidth(key) + itemSpacingX; });
+    }
+
+    float windowHeight = descLineSize.y + windowPadding.y * 2.f;
+
+    ImVec4 descTextColor = ::ColorToImVec4(this->FontColor);
+    ImVec4 valueTextColor = F3DStyle::imgui::GetHighlightColor(); // Blue
+
+    // change color for booleans
+    if (value == "ON")
+    {
+      valueTextColor = F3DStyle::imgui::GetCompletionColor(); // Green
+    }
+    else if (value == "OFF")
+    {
+      valueTextColor = F3DStyle::imgui::GetErrorColor(); // Red
+    }
+
+    constexpr double fadingTime = 0.5;
+    float alpha = std::clamp((stopTime - currentTime) / fadingTime, 0.0, 1.0);
+
+    descTextColor.w = alpha;
+    valueTextColor.w = alpha;
+    ImGui::SetNextWindowBgAlpha(alpha * this->BackdropOpacity);
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+      ImGuiWindowFlags_NoNav;
+
+    float yOffset = index * (windowHeight + margin);
+
+    ImVec2 position(margin, viewport->WorkSize.y - windowHeight - margin - yOffset);
+    ::SetupNextWindow(position, ImVec2(windowWidth, windowHeight));
+
+    // Render each notification in separated window
+    ImGui::Begin(("##notif_" + std::to_string(index)).c_str(), nullptr, flags);
+
+    if (this->BindingsVisible && !bind.empty())
+    {
+      for (const std::string& key : keys)
+      {
+        this->RenderBadge(key, alpha);
+        ImGui::SameLine();
+      }
+    }
+
+    ImGui::TextColored(descTextColor, "%s", description.c_str());
+    if (!value.empty())
+    {
+      ImGui::SameLine();
+      ImGui::TextColored(valueTextColor, "%s", value.c_str());
+    }
+
+    ImGui::End();
+    ImGui::PopStyleVar();
+    ImGui::PopFont();
+
+    ++index;
+  }
+}
+
+//----------------------------------------------------------------------------
+float vtkF3DImguiActor::CalcBadgeWidth(const std::string& text)
+{
+  ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+  const float paddingX = F3DStyle::GetDefaultMargin() * this->FontScale;
+  return textSize.x + paddingX * 2.f;
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DImguiActor::RenderBadge(const std::string& text, float alpha)
+{
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+  ImVec2 pos = ImGui::GetCursorScreenPos();
+  ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+
+  const float paddingX = F3DStyle::GetDefaultMargin() * this->FontScale;
+  const float paddingY = F3DStyle::GetDefaultMargin() * this->FontScale * 0.5f;
+
+  ImVec2 badgeSize = ImVec2(textSize.x + paddingX * 2.f, textSize.y + paddingY * 2.f);
+
+  // Align badge vertically
+  pos.y += (ImGui::GetTextLineHeight() - badgeSize.y) * 0.5f;
+
+  ImVec2 rectMin = pos;
+  ImVec2 rectMax = ImVec2(pos.x + badgeSize.x, pos.y + badgeSize.y);
+
+  float rounding = 4.f * this->FontScale;
+
+  ImVec4 bindingTextColor = ::ColorToImVec4(this->FontColor);
+  ImVec4 bindingRectColor = F3DStyle::imgui::GetMidColor();
+  bindingTextColor.w = alpha;
+  bindingRectColor.w = alpha;
+
+  // Background
+  drawList->AddRectFilled(
+    rectMin, rectMax, ImGui::ColorConvertFloat4ToU32(bindingRectColor), rounding);
+
+  // Text
+  ImVec2 textPos = ImVec2(pos.x + paddingX, pos.y + paddingY);
+
+  drawList->AddText(textPos, ImGui::ColorConvertFloat4ToU32(bindingTextColor), text.c_str());
+
+  // Advance layout cursor
+  ImGui::Dummy(badgeSize);
 }
