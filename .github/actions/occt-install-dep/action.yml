@@ -23,14 +23,14 @@ runs:
 
     - name: Cache OCCT
       id: cache-occt
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: dependencies/occt_install
-        key: occt-${{inputs.version}}-${{runner.os}}-${{inputs.cpu}}-${{inputs.global_cache_index}}-1
+        key: occt-${{inputs.version}}-${{runner.os}}-${{inputs.cpu}}-${{inputs.global_cache_index}}-2
 
     - name: Checkout OCCT
       if: steps.cache-occt.outputs.cache-hit != 'true'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: Open-Cascade-SAS/OCCT
         submodules: true
@@ -75,7 +75,7 @@ runs:
         -DCMAKE_INSTALL_NAME_DIR:PATH=${{github.workspace}}/dependencies/install/lib
         -DINSTALL_DIR_BIN:PATH=bin
         -DUSE_FREETYPE=OFF
-        ${{ runner.os == 'macOS' && '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0' || null }}
+        ${{ runner.os == 'macOS' && '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0' || null }}
         ${{ runner.os == 'Windows' && '-Ax64 -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL' || null }}
 
     # Build without XCAF (TKXDESTEP;TKXDEIGES;TKBinXCAF) in minver for better testing
@@ -104,7 +104,7 @@ runs:
         -DINSTALL_DIR_BIN:PATH=bin
         -DUSE_FREETYPE=OFF
         -DCMAKE_OSX_ARCHITECTURES=${{ inputs.cpu }}
-        ${{ runner.os == 'macOS' && '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15' || null }}
+        ${{ runner.os == 'macOS' && '-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0' || null }}
         ${{ runner.os == 'Windows' && '-Ax64 -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL' || null }}
 
     - name: Build OCCT
@@ -120,7 +120,7 @@ runs:
 
     - name: Save cache
       if: steps.cache-occt.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         key: ${{ steps.cache-occt.outputs.cache-primary-key }}
         path: dependencies/occt_install

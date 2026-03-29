@@ -176,11 +176,13 @@ public:
    * ANY modifier interactions will only be triggered if no other interaction bind with modifier
    * is found.
    *
+   * If notify is true, a notification is triggered when pressing the binding
+   *
    * Adding commands for an existing bind will throw a interactor::already_exists_exception.
    */
   virtual interactor& addBinding(const interaction_bind_t& bind, std::vector<std::string> commands,
     std::string group = {}, documentation_callback_t documentationCallback = nullptr,
-    BindingType type = BindingType::OTHER) = 0;
+    BindingType type = BindingType::OTHER, bool notify = true) = 0;
 
   /**
    * See addBinding
@@ -191,17 +193,17 @@ public:
    */
   virtual interactor& addBinding(const interaction_bind_t& bind, std::string command,
     std::string group = {}, documentation_callback_t documentationCallback = nullptr,
-    BindingType type = BindingType::OTHER) = 0;
+    BindingType type = BindingType::OTHER, bool notify = true) = 0;
 
   /**
    * Convenience initializer list signature for add binding method
    */
   interactor& addBinding(const interaction_bind_t& bind, std::initializer_list<std::string> list,
     std::string group = {}, documentation_callback_t documentationCallback = nullptr,
-    BindingType type = BindingType::OTHER)
+    BindingType type = BindingType::OTHER, bool notify = true)
   {
     return this->addBinding(bind, std::vector<std::string>(list), std::move(group),
-      std::move(documentationCallback), type);
+      std::move(documentationCallback), type, notify);
   }
 
   /**
@@ -370,6 +372,12 @@ public:
    * deltaTime should be strictly positive.
    */
   virtual interactor& triggerEventLoop(double deltaTime) = 0;
+
+  /**
+   * Trigger a single text line notification with text desc for duration seconds.
+   */
+  virtual interactor& triggerNotification(
+    std::string desc, std::string value = "", double duration = 3.f) = 0;
 
   /**
    * Play a VTK interaction file.

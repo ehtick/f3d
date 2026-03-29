@@ -130,6 +130,10 @@
       },
       "final_shader": {
         "type": "string"
+      },
+      "display_depth": {
+        "type": "bool",
+        "default_value": "false"
       }
     },
     "hdri": {
@@ -269,6 +273,10 @@
       "type": "ratio",
       "default_value": "1.0"
     },
+    "font_color": {
+      "type": "color",
+      "default_value": "0.957,0.957,0.957"
+    },
     "loader_progress": {
       "type": "bool",
       "default_value": "false"
@@ -282,12 +290,36 @@
     },
     "animation_progress_color": {
       "type": "color"
+    },
+    "dpi_aware": {
+      "type": "bool",
+      "default_value": "false"
+    },
+    "scene_hierarchy": {
+      "type": "bool",
+      "default_value": "false"
+    },
+    "notifications": {
+      "enable": {
+        "type": "bool",
+        "default_value": "false"
+      },
+      "show_bindings": {
+        "type": "bool",
+        "default_value": "false"
+      }
     }
   },
   "model": {
     "matcap": {
       "texture": {
         "type": "path"
+      }
+    },
+    "checkerboard": {
+      "enable": {
+        "type": "bool",
+        "default_value": "false"
       }
     },
     "color": {
@@ -357,6 +389,10 @@
         "type": "colormap",
         "default_value": "0.0, 0.0, 0.0, 0.0, 0.4, 0.9, 0.0, 0.0, 0.8, 0.9, 0.9, 0.0, 1.0, 1.0, 1.0, 1.0"
       },
+      "opacity_map": {
+        "type": "double_vector",
+        "default_value": "0.0, 0.0, 1.0, 1.0"
+      },
       "range": {
         "type": "double_vector"
       }
@@ -379,6 +415,12 @@
         "default_value": "false"
       }
     },
+    "normal_glyphs": {
+      "enable": {
+        "type": "bool",
+        "default_value": "false"
+      }
+    },
     "volume": {
       "enable": {
         "type": "bool",
@@ -391,9 +433,14 @@
     }
   },
   "interactor": {
+    "style": {
+      "type": "string",
+      "default_value": "default"
+    },
     "trackball": {
       "type": "bool",
-      "default_value": "false"
+      "default_value": "false",
+      "deprecated": "use interactor.style instead"
     },
     "invert_zoom": {
       "type": "bool",

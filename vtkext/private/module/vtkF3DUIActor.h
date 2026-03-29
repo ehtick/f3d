@@ -10,8 +10,11 @@
 
 #include <vtkProp.h>
 
+#include <array>
+#include <chrono>
 #include <cstdint>
 #include <deque>
+#include <map>
 
 class vtkOpenGLRenderWindow;
 
@@ -35,6 +38,14 @@ public:
 
   using CheatSheetTuple = std::tuple<std::string, std::string, std::string, CheatSheetBindingType>;
   using CheatSheetGroup = std::pair<std::string, std::vector<CheatSheetTuple>>;
+
+  struct Notification
+  {
+    std::string desc;
+    std::string value;
+    std::string bind;
+    double stopTime;
+  };
 
   /**
    * Initialize the UI actor resources
@@ -99,6 +110,12 @@ public:
   void SetMetaDataVisibility(bool show);
 
   /**
+   * Set the scene hierarchy visibility
+   * False by default
+   */
+  void SetSceneHierarchyVisibility(bool show);
+
+  /**
    * Set the filename string
    * Empty by default
    */
@@ -142,6 +159,18 @@ public:
   void SetFpsCounterVisibility(bool show);
 
   /**
+   * Set the notification visibility
+   * False by default
+   */
+  void SetNotificationVisibility(bool show);
+
+  /**
+   * Set the bindings visibility in notifications
+   * False by default
+   */
+  void SetBindingsVisibility(bool show);
+
+  /**
    * Updates the fps value
    * 0 by default
    */
@@ -159,6 +188,11 @@ public:
   void SetFontScale(const double fontScale);
 
   /**
+   * Set the font color
+   */
+  void SetFontColor(const std::array<double, 3>& color);
+
+  /**
    * Render the UI actor
    */
   int RenderOverlay(vtkViewport* vp) override;
@@ -174,6 +208,12 @@ public:
   virtual void SetDeltaTime(double)
   {
   }
+
+  /**
+   * Add notification info to deque
+   */
+  void AddNotification(
+    const std::string& desc, const std::string& value, const std::string& bind, double stopTime);
 
 protected:
   vtkF3DUIActor();
@@ -197,6 +237,13 @@ protected:
    * Render the dropzone UI widget
    */
   virtual void RenderDropZone()
+  {
+  }
+
+  /**
+   * Render the scene hierarchy UI widget
+   */
+  virtual void RenderSceneHierarchy(vtkOpenGLRenderWindow*)
   {
   }
 
@@ -248,6 +295,14 @@ protected:
   virtual void RenderConsoleBadge()
   {
   }
+
+  /**
+   * Render the notifications
+   */
+  virtual void RenderNotifications(double vtkNotUsed(currenTime))
+  {
+  }
+
   bool DropZoneLogoVisible = false;
   bool DropZoneVisible = false;
   std::string DropText = "";
@@ -261,6 +316,8 @@ protected:
 
   bool MetaDataVisible = false;
   std::string MetaData = "";
+
+  bool SceneHierarchyVisible = false;
 
   bool CheatSheetVisible = false;
   std::vector<CheatSheetGroup> CheatSheet;
@@ -280,7 +337,17 @@ protected:
   std::string FontFile = "";
   double FontScale = 1.0;
 
+  /**
+   * Initializing the vector here because its needed in the initialization function,
+   * but set afterwards.
+   */
+  std::array<double, 3> FontColor = { 1.0, 1.0, 1.0 };
+
   double BackdropOpacity = 0.9;
+
+  bool NotificationVisible = false;
+  bool BindingsVisible = false;
+  std::deque<Notification> Notifications;
 
 private:
   vtkF3DUIActor(const vtkF3DUIActor&) = delete;

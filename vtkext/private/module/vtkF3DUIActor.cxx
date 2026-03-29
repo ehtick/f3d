@@ -1,8 +1,13 @@
 #include "vtkF3DUIActor.h"
 
+#include "vtkF3DRenderer.h"
+
 #include <vtkObjectFactory.h>
 #include <vtkOpenGLRenderWindow.h>
+#include <vtkRendererCollection.h>
 #include <vtkViewport.h>
+
+#include <algorithm>
 
 vtkObjectFactoryNewMacro(vtkF3DUIActor);
 
@@ -74,6 +79,12 @@ void vtkF3DUIActor::SetMetaData(const std::string& metadata)
 }
 
 //----------------------------------------------------------------------------
+void vtkF3DUIActor::SetSceneHierarchyVisibility(bool show)
+{
+  this->SceneHierarchyVisible = show;
+}
+
+//----------------------------------------------------------------------------
 void vtkF3DUIActor::SetCheatSheetVisibility(bool show)
 {
   this->CheatSheetVisible = show;
@@ -110,6 +121,18 @@ void vtkF3DUIActor::SetFpsCounterVisibility(bool show)
 }
 
 //----------------------------------------------------------------------------
+void vtkF3DUIActor::SetNotificationVisibility(bool show)
+{
+  this->NotificationVisible = show;
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DUIActor::SetBindingsVisibility(bool show)
+{
+  this->BindingsVisible = show;
+}
+
+//----------------------------------------------------------------------------
 void vtkF3DUIActor::UpdateFpsValue(const double elapsedFrameTime)
 {
   this->TotalFrameTimes += elapsedFrameTime;
@@ -143,6 +166,16 @@ void vtkF3DUIActor::SetFontScale(const double fontScale)
   if (this->FontScale != fontScale)
   {
     this->FontScale = fontScale;
+    this->Initialized = false;
+  }
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DUIActor::SetFontColor(const std::array<double, 3>& color)
+{
+  if (this->FontColor != color)
+  {
+    this->FontColor = color;
     this->Initialized = false;
   }
 }
@@ -203,6 +236,11 @@ int vtkF3DUIActor::RenderOverlay(vtkViewport* vp)
     {
       this->RenderCheatSheet();
     }
+
+    if (this->SceneHierarchyVisible)
+    {
+      this->RenderSceneHierarchy(renWin);
+    }
   }
 
   if (this->ConsoleBadgeEnabled)
@@ -220,7 +258,30 @@ int vtkF3DUIActor::RenderOverlay(vtkViewport* vp)
     this->RenderFpsCounter();
   }
 
+  vtkF3DRenderer* ren = vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
+  assert(ren != nullptr);
+
+  double currentTime = ren->GetTotalTime();
+
+  // clear outdated notifications
+  while (!this->Notifications.empty() && currentTime >= this->Notifications.back().stopTime)
+  {
+    this->Notifications.pop_back();
+  }
+
+  if (this->NotificationVisible)
+  {
+    this->RenderNotifications(currentTime);
+  }
+
   this->EndFrame(renWin);
 
   return 1;
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DUIActor::AddNotification(
+  const std::string& desc, const std::string& value, const std::string& bind, double stopTime)
+{
+  this->Notifications.emplace_front(Notification{ desc, value, bind, stopTime });
 }

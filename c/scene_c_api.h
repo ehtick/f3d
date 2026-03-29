@@ -45,6 +45,16 @@ extern "C"
   F3D_EXPORT int f3d_scene_add_mesh(f3d_scene_t* scene, const f3d_mesh_t* mesh);
 
   /**
+   * @brief Add and load a memory buffer into the scene.
+   *
+   * @param scene Scene handle.
+   * @param buffer Memory buffer containing a file.
+   * @param size Size of the buffer in bytes.
+   * @return 1 on success, 0 on failure.
+   */
+  F3D_EXPORT int f3d_scene_add_buffer(f3d_scene_t* scene, void* buffer, size_t size);
+
+  /**
    * @brief Clear the scene of all added files.
    *
    * @param scene Scene handle.
@@ -77,7 +87,7 @@ extern "C"
    *
    * @param scene Scene handle.
    * @param index Index of the light.
-   * @return Light state.
+   * @return Light state, NULL on failure.
    */
   F3D_EXPORT f3d_light_state_t* f3d_scene_get_light(const f3d_scene_t* scene, int index);
 
@@ -124,6 +134,25 @@ extern "C"
    * @param time_value Time value to load.
    */
   F3D_EXPORT void f3d_scene_load_animation_time(f3d_scene_t* scene, double time_value);
+
+  /**
+   * @brief Get keyframes times of loaded files
+   *
+   * The returned keyframes is heap-allocated and must be freed with
+   * f3d_scene_free_animation_keyframes().
+   *
+   * @param scene Scene handle.
+   * @param count Pointer to store the count of keyframes
+   * @return Pointer to the array of keyframe time keys
+   */
+  F3D_EXPORT double* f3d_scene_get_animation_keyframes(f3d_scene_t* scene, unsigned int* count);
+
+  /**
+   * @brief Free the animation keyframes array.
+   *
+   * @param keyframes Pointer to the keyframes array to free.
+   */
+  F3D_EXPORT void f3d_scene_free_animation_keyframes(double* keyframes);
 
   /**
    * @brief Get animation time range of currently added files.

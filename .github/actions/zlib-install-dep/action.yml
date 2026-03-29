@@ -23,15 +23,15 @@ runs:
 
     - name: Cache zlib
       id: cache-zlib
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: dependencies/zlib_install
-        key: zlib-${{inputs.version}}-${{runner.os}}-${{inputs.cpu}}-${{inputs.global_cache_index}}-0
+        key: zlib-${{inputs.version}}-${{runner.os}}-${{inputs.cpu}}-${{inputs.global_cache_index}}-1
 
-    # Dependents: blosc openvdb vtk
+    # Dependents: blosc openvdb vtk tiff geotiff pdal gdal
     - name: Checkout zlib
       if: steps.cache-zlib.outputs.cache-hit != 'true'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: madler/zlib
         path: "./dependencies/zlib"
@@ -54,7 +54,7 @@ runs:
         -DBUILD_SHARED_LIBS=ON
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_INSTALL_PREFIX=../zlib_install
-        ${{ runner.os == 'macOS' && '-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0' || null }}
+        ${{ runner.os == 'macOS' && '-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0' || null }}
         ${{ runner.os == 'Windows' && '-Ax64 -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL' || null }}
 
     - name: Build zlib
@@ -70,7 +70,7 @@ runs:
 
     - name: Save cache
       if: steps.cache-zlib.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         key: ${{ steps.cache-zlib.outputs.cache-primary-key }}
         path: dependencies/zlib_install

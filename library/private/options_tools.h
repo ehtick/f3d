@@ -5,8 +5,9 @@
 #include "types.h"
 #include "utils.h"
 
+#include "vtkF3DNamedColors.h"
+
 #include <vtkMath.h>
-#include <vtkNamedColors.h>
 #include <vtkSmartPointer.h>
 
 #include <algorithm>
@@ -314,7 +315,7 @@ color_t parse(const std::string& str)
     }
 
     /* Named colors search */
-    vtkNew<vtkNamedColors> color;
+    vtkNew<vtkF3DNamedColors> color;
     if (color->ColorExists(strCompact))
     {
       double rgba[4];

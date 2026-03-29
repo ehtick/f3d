@@ -62,6 +62,11 @@ private:
   void RenderDropZone() override;
 
   /**
+   * Render the scene hierarchy UI widget
+   */
+  void RenderSceneHierarchy(vtkOpenGLRenderWindow* renWin) override;
+
+  /**
    * Render the filename UI widget
    */
   void RenderFileName() override;
@@ -96,9 +101,25 @@ private:
    */
   void RenderConsoleBadge() override;
 
+  /**
+   * Render the notifications at the bottom left of viewport.
+   * Newest to oldest, from bottom to top.
+   */
+  void RenderNotifications(double currentTime) override;
+
 private:
   vtkF3DImguiActor(const vtkF3DImguiActor&) = delete;
   void operator=(const vtkF3DImguiActor&) = delete;
+
+  /**
+   * Render the text as a grey badge with the provided alpha value
+   */
+  void RenderBadge(const std::string& text, float alpha);
+
+  /**
+   * Compute the width of a badge
+   */
+  float CalcBadgeWidth(const std::string& text);
 };
 
 #endif

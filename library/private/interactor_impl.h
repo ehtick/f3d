@@ -48,10 +48,10 @@ public:
   interactor& initBindings() override;
   interactor& addBinding(const interaction_bind_t& bind, std::vector<std::string> commands,
     std::string group = std::string(), documentation_callback_t documentationCallback = nullptr,
-    BindingType type = BindingType::OTHER) override;
+    BindingType type = BindingType::OTHER, bool notify = true) override;
   interactor& addBinding(const interaction_bind_t& bind, std::string command,
     std::string group = std::string(), documentation_callback_t documentationCallback = nullptr,
-    BindingType type = BindingType::OTHER) override;
+    BindingType type = BindingType::OTHER, bool notify = true) override;
   interactor& removeBinding(const interaction_bind_t& bind) override;
   std::vector<std::string> getBindGroups() const override;
   std::vector<interaction_bind_t> getBindsForGroup(std::string group) const override;
@@ -80,6 +80,9 @@ public:
   bool playInteraction(const std::filesystem::path& file, double deltaTime,
     std::function<void()> userCallBack) override;
   bool recordInteraction(const std::filesystem::path& file) override;
+
+  interactor& triggerNotification(
+    std::string desc, std::string value = "", double duration = 3.f) override;
 
   interactor& start(double deltaTime, std::function<void()> userCallBack) override;
   interactor& stop() override;

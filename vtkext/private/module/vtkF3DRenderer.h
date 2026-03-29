@@ -36,6 +36,7 @@ class vtkDiscretizableColorTransferFunction;
 class vtkF3DOpenGLGridMapper;
 class vtkGridAxesActor3D;
 class vtkImageReader2;
+class vtkPNGReader;
 class vtkOrientationMarkerWidget;
 class vtkScalarBarActor;
 class vtkSkybox;
@@ -66,6 +67,7 @@ public:
     NONE,
     DUAL_DEPTH_PEELING,
     SORT,
+    SORT_CPU,
     STOCHASTIC
   };
 
@@ -75,7 +77,11 @@ public:
   enum class SplatType : unsigned char
   {
     SPHERE,
-    GAUSSIAN
+    GAUSSIAN,
+    CIRCLE,
+    STD_DEV,
+    BOUND,
+    CROSS
   };
 
   ///@{
@@ -97,6 +103,9 @@ public:
   void ShowDropZoneLogo(bool show);
   void ShowHDRISkybox(bool show);
   void ShowArmature(bool show);
+  void ShowSceneHierarchy(bool show);
+  void ShowNotification(bool show);
+  void ShowBindings(bool show);
   ///@}
 
   using vtkOpenGLRenderer::SetBackground;
@@ -108,6 +117,8 @@ public:
   void SetPointSize(const std::optional<double>& pointSize);
   void SetFontFile(const std::optional<fs::path>& fontFile);
   void SetFontScale(const double fontScale);
+  void SetFontColor(const std::array<double, 3>& color);
+  void SetDPIAware(bool enable);
   void SetHDRIFile(const std::optional<fs::path>& hdriFile);
   void SetUseImageBasedLighting(bool use) override;
   void SetBackground(const double* backgroundColor) override;
@@ -136,9 +147,13 @@ public:
   void SetUseRaytracing(bool use);
   void SetUseRaytracingDenoiser(bool use);
   void SetBlendingMode(BlendingMode mode);
+  BlendingMode GetBlendingMode() const;
   void SetUseSSAOPass(bool use);
   void SetAntiAliasingMode(AntiAliasingMode mode);
+  AntiAliasingMode GetAntiAliasingMode() const;
   void SetUseToneMappingPass(bool use);
+  void SetDisplayDepth(bool use);
+  void SetDisplayDepthScalarColoring(bool use);
   void SetUseBlurBackground(bool use);
   void SetBlurCircleOfConfusionRadius(double radius);
   void SetRaytracingSamples(int samples);
@@ -147,22 +162,9 @@ public:
   ///@}
 
   /**
-   * Get BlendingMode
-   */
-  BlendingMode GetBlendingMode() const;
-
-  /**
    * Set SetUseOrthographicProjection
    */
   void SetUseOrthographicProjection(const std::optional<bool>& use);
-
-  ///@{
-  /**
-   * Set/Get UseTrackball
-   */
-  void SetUseTrackball(bool use);
-  vtkGetMacro(UseTrackball, bool);
-  ///@}
 
   ///@{
   /**
@@ -171,6 +173,12 @@ public:
   vtkSetMacro(InvertZoom, bool);
   vtkGetMacro(InvertZoom, bool);
   ///@}
+
+  /**
+   * Set the interaction style from a string.
+   * Accepted values: "default", "trackball", "2d".
+   */
+  void SetInteractionStyle(const std::string& style);
 
   /**
    * Reimplemented to configure:
@@ -336,6 +344,13 @@ public:
   void ShowScalarBar(bool show);
 
   /**
+   * Set the visibility of the normal glyphs actor.
+   * Normal glyphs actor displays arrows depicting the direction of vertex normals.
+   * It will only be shown if raytracing and Point Sprites rendering modes are disabled.
+   */
+  void SetUseNormalGlyphs(bool use);
+
+  /**
    * Set the visibility of the point sprites actor.
    * It will only be shown if raytracing and volume are not enabled
    */
@@ -373,9 +388,31 @@ public:
   void SetColormapDiscretization(std::optional<int> discretization);
 
   /**
+   * Set the opacity map to use
+   * Setting an empty vector will use default opacity map
+   */
+  void SetOpacityMap(const std::vector<double>& opacityMap);
+
+  /**
    * Set the meta importer to recover coloring information from
    */
   void SetImporter(vtkF3DMetaImporter* importer);
+
+  /**
+   * Get the meta importer
+   */
+  vtkF3DMetaImporter* GetMetaImporter()
+  {
+    return this->Importer;
+  }
+
+  /**
+   * Mark the coloring as dirty for force update
+   */
+  void ForceUpdateColoring()
+  {
+    this->ColoringConfigured = false;
+  }
 
   ///@{
   /**
@@ -384,6 +421,11 @@ public:
   void SetEnableColoring(bool enable);
   vtkGetMacro(EnableColoring, bool);
   ///@}
+
+  /**
+   * Set checkerboard mode
+   */
+  void SetEnableCheckerBoard(bool enable);
 
   ///@{
   /**
@@ -477,10 +519,24 @@ public:
    */
   void SetUIDeltaTime(double time);
 
+  //@{
+  /**
+   * Set/Get the total application time in seconds
+   */
+  vtkSetMacro(TotalTime, double);
+  vtkGetMacro(TotalTime, double);
+  //@}
+
   /**
    * Set console badge enabled status
    */
   void SetConsoleBadgeEnabled(bool enabled);
+
+  /**
+   * Add notification info to deque
+   */
+  void AddNotification(
+    const std::string& desc, const std::string& value, const std::string& bind, double duration);
 
 private:
   vtkF3DRenderer();
@@ -558,9 +614,9 @@ private:
   void CreateCacheDirectory();
 
   /**
-   * Configure coloring for all actors
+   * Configure coloring and handle visibility for all actors
    */
-  void ConfigureColoring();
+  void ConfigureColoringAndVisibilities();
 
   /**
    * Convenience method for configuring a poly data mapper for coloring
@@ -574,19 +630,15 @@ private:
    * Return true if they were configured for coloring, false otherwise.
    */
   static bool ConfigureVolumeForColoring(vtkSmartVolumeMapper* mapper, vtkVolume* volume,
-    const std::string& name, int component, vtkColorTransferFunction* ctf, double range[2],
+    const std::string& name, int component, vtkColorTransferFunction* ctf,
+    const std::vector<double>& opacityMap, double range[2], bool& opacityTransferFunctionConfigured,
     bool cellFlag = false, bool inverseOpacityFlag = false);
 
   /**
-   * Configure screen spaced jittering for TAA
+   * Configure opacity transfer function for volume rendering
    */
-  void ConfigureJitter(bool enable);
-
-  /**
-   * Configure Halton sequence for TAA. Valid direction values are 0 and 1. Returns a value that is
-   * used for jitter
-   */
-  float ConfigureHaltonSequence(int direction);
+  static void ConfigureOpacityTransferFunction(vtkPiecewiseFunction* otf, double range[2],
+    const std::vector<double>& opacityMap, bool inverseOpacityFlag);
 
   /**
    * Convenience method for configuring a scalar bar actor for coloring
@@ -611,6 +663,16 @@ private:
   void ConfigurePointSprites();
 
   /**
+   * Configure Normal Glyphs for all actors
+   */
+  void ConfigureNormalGlyphs();
+
+  /**
+   * Updates the normal glyph scale aiming to keep a consistent screen size
+   */
+  void UpdateNormalGlyphsScale();
+
+  /**
    * Updates the axis widget size based on the window size
    */
   void UpdateAxisWidgetSize();
@@ -620,6 +682,7 @@ private:
   vtkSmartPointer<vtkCameraOrientationRepresentation> ModernAxisRepresentation;
   vtkSmartPointer<vtkCallbackCommand> ModernAxisWidgetResizeCallback;
   double ModernAxisBackdropOpacity = 0.0;
+  double TotalTime = 0.0;
 
   // Does vtk version support GridAxesActor
 #if VTK_VERSION_NUMBER >= VTK_VERSION_CHECK(9, 4, 20250513)
@@ -663,6 +726,7 @@ private:
   bool FilenameVisible = false;
   bool MetaDataVisible = false;
   bool HDRIFilenameVisible = false;
+  bool SceneHierarchyVisible = false;
   bool CheatSheetVisible = false;
   bool ConsoleVisible = false;
   bool MinimalConsoleVisible = false;
@@ -676,9 +740,10 @@ private:
   BlendingMode BlendingModeEnabled = BlendingMode::NONE;
   bool UseSSAOPass = false;
   bool UseToneMappingPass = false;
+  bool DisplayDepth = false;
+  bool DisplayDepthScalarColoring = false;
   bool UseBlurBackground = false;
   std::optional<bool> UseOrthographicProjection = false;
-  bool UseTrackball = false;
   bool InvertZoom = false;
 
   int RaytracingSamples = 0;
@@ -710,6 +775,9 @@ private:
 
   std::optional<fs::path> FontFile;
   double FontScale = 1.0;
+  std::array<double, 3> FontColor = { 1.0, 1.0, 1.0 };
+
+  bool DPIAware = false;
 
   double LightIntensity = 1.0;
   std::map<vtkLight*, double> OriginalLightIntensities;
@@ -734,6 +802,8 @@ private:
   bool VolumePropsAndMappersConfigured = false;
   bool ColoringConfigured = false;
 
+  bool NormalGlyphsConfigured = false;
+
   std::optional<double> Opacity;
   std::optional<double> Roughness;
   std::optional<double> Metallic;
@@ -748,11 +818,16 @@ private:
   std::optional<fs::path> TextureEmissive;
   std::optional<fs::path> TextureNormal;
 
+  bool EnableCheckerBoard = false;
+  vtkSmartPointer<vtkPNGReader> CheckerBoardReader;
+  vtkSmartPointer<vtkTexture> CheckerBoardTexture;
+
   vtkSmartPointer<vtkDiscretizableColorTransferFunction> ColorTransferFunction;
   bool ExpandingRangeSet = false;
   bool UsingExpandingRange = true;
   double ColorRange[2] = { 0.0, 1.0 };
   bool ColorTransferFunctionConfigured = false;
+  bool OpacityTransferFunctionConfigured = false;
 
   bool EnableColoring = false;
   bool UseCellColoring = false;
@@ -760,6 +835,7 @@ private:
   std::optional<std::string> ArrayNameForColoring;
 
   bool ScalarBarVisible = false;
+  bool UseNormalGlyphs = false;
   bool UsePointSprites = false;
   bool UseVolume = false;
   bool UseInverseOpacityFunction = false;
@@ -768,8 +844,7 @@ private:
   std::vector<double> Colormap;
   std::optional<int> ColormapDiscretization;
 
-  int TaaHaltonNumerator[2] = { 0, 0 };
-  int TaaHaltonDenominator[2] = { 1, 1 };
+  std::vector<double> OpacityMap;
 
   SplatType PointSpritesType = SplatType::SPHERE;
   double PointSpritesSize = 10;

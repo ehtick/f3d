@@ -1,6 +1,6 @@
 # False positive with Qt test
-race:libQt5Core
-race:libQt5XcbQpa
+race:libQt6Core
+race:libQt6XcbQpa
 
 # Issue in mesa sw_rast
 race:swrast_dri
@@ -10,6 +10,9 @@ race:libvtkCommonDataModel
 
 # OpenEXR
 race:libOpenEXR
+
+# PDAL
+race:libpdalcpp
 
 # Mesa
 race:libOSMesa

@@ -30,12 +30,15 @@ runs:
         -DF3D_BINDINGS_JAVA=ON
         -DF3D_MODULE_EXR=ON
         -DF3D_MODULE_UI=OFF
+        -DF3D_MODULE_WEBP=ON
         -DF3D_PLUGINS_STATIC_BUILD=ON
         -DF3D_PLUGIN_BUILD_ALEMBIC=ON
         -DF3D_PLUGIN_BUILD_ASSIMP=ON
         -DF3D_PLUGIN_BUILD_DRACO=ON
         -DF3D_PLUGIN_BUILD_HDF=OFF
         -DF3D_PLUGIN_BUILD_OCCT=ON
+        -DF3D_PLUGIN_BUILD_PDAL=OFF
+        -DF3D_PLUGIN_BUILD_WEBIFC=ON
         -DF3D_STRICT_BUILD=ON
 
     - name: Build
@@ -44,14 +47,14 @@ runs:
       run: cmake --build . --parallel 2 --target install
 
     - name: Upload native library
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         path: ./build/lib/libf3d-java.so
         name: f3d-android-native-${{inputs.arch}}
 
     - name: Upload Java package
       if: inputs.arch == 'arm64-v8a' # avoid duplication
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         path: ./build/java/f3d.jar
         name: f3d-android-jar

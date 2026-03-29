@@ -26,15 +26,15 @@ runs:
 
     - name: Cache OpenEXR
       id: cache-openexr
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: dependencies/openexr_install
-        key: openexr-${{inputs.version}}-${{inputs.imath_version}}-${{runner.os}}-${{inputs.cpu}}-${{inputs.global_cache_index}}-0
+        key: openexr-${{inputs.version}}-${{inputs.imath_version}}-${{runner.os}}-${{inputs.cpu}}-${{inputs.global_cache_index}}-1
 
     # Dependents: usd
     - name: Checkout OpenEXR
       if: steps.cache-openexr.outputs.cache-hit != 'true'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: AcademySoftwareFoundation/openexr
         path: "./dependencies/openexr"
@@ -67,7 +67,7 @@ runs:
         -DCMAKE_PREFIX_PATH:PATH=../install/
         -DOPENEXR_INSTALL_TOOLS=OFF
         -DOPENEXR_INSTALL_EXAMPLES=OFF
-        ${{ runner.os == 'macOS' && '-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 -DCMAKE_MACOSX_RPATH=ON' || null }}
+        ${{ runner.os == 'macOS' && '-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DCMAKE_MACOSX_RPATH=ON' || null }}
         ${{ runner.os == 'Windows' && '-Ax64 -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL' || null }}
 
     - name: Build OpenEXR
@@ -83,7 +83,7 @@ runs:
 
     - name: Save cache
       if: steps.cache-openexr.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         key: ${{ steps.cache-openexr.outputs.cache-primary-key }}
         path: dependencies/openexr_install

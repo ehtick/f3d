@@ -207,8 +207,8 @@ extern "C"
     return self;
   }
 
-  JNIEXPORT jobject JAVA_BIND(Interactor, addBindingCommands)(
-    JNIEnv* env, jobject self, jobject bind, jobject commands, jstring group, jobject type)
+  JNIEXPORT jobject JAVA_BIND(Interactor, addBindingCommands)(JNIEnv* env, jobject self,
+    jobject bind, jobject commands, jstring group, jobject type, jboolean notify)
   {
     f3d::interaction_bind_t nativeBind = JavaBindToNative(env, bind);
 
@@ -252,12 +252,13 @@ extern "C"
         break;
     }
 
-    GetInteractor(env, self).addBinding(nativeBind, commandsVec, groupCpp, nullptr, nativeType);
+    GetInteractor(env, self).addBinding(
+      nativeBind, commandsVec, groupCpp, nullptr, nativeType, notify);
     return self;
   }
 
-  JNIEXPORT jobject JAVA_BIND(Interactor, addBindingCommand)(
-    JNIEnv* env, jobject self, jobject bind, jstring command, jstring group, jobject type)
+  JNIEXPORT jobject JAVA_BIND(Interactor, addBindingCommand)(JNIEnv* env, jobject self,
+    jobject bind, jstring command, jstring group, jobject type, jboolean notify)
   {
     f3d::interaction_bind_t nativeBind = JavaBindToNative(env, bind);
 
@@ -291,7 +292,8 @@ extern "C"
         break;
     }
 
-    GetInteractor(env, self).addBinding(nativeBind, commandCpp, groupCpp, nullptr, nativeType);
+    GetInteractor(env, self).addBinding(
+      nativeBind, commandCpp, groupCpp, nullptr, nativeType, notify);
     return self;
   }
 
@@ -625,6 +627,34 @@ extern "C"
     return self;
   }
 
+  JNIEXPORT jobject JAVA_BIND(Interactor, startWithCallback)(
+    JNIEnv* env, jobject self, jdouble deltaTime, jobject callback)
+  {
+    jobject globalCallback = env->NewGlobalRef(callback);
+
+    GetInteractor(env, self).start(deltaTime,
+      [globalCallback]()
+      {
+        JNIEnv* env = nullptr;
+#ifdef __ANDROID__
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK)
+#else
+        if (g_jvm->AttachCurrentThread(reinterpret_cast<void**>(&env), nullptr) != JNI_OK)
+#endif
+        {
+          return;
+        }
+
+        jclass runnableClass = env->GetObjectClass(globalCallback);
+        jmethodID runMethod = env->GetMethodID(runnableClass, "run", "()V");
+        env->CallVoidMethod(globalCallback, runMethod);
+
+        env->DeleteGlobalRef(globalCallback);
+        g_jvm->DetachCurrentThread();
+      });
+    return self;
+  }
+
   JNIEXPORT jobject JAVA_BIND(Interactor, stop)(JNIEnv* env, jobject self)
   {
     GetInteractor(env, self).stop();
@@ -640,6 +670,21 @@ extern "C"
   JNIEXPORT jobject JAVA_BIND(Interactor, requestStop)(JNIEnv* env, jobject self)
   {
     GetInteractor(env, self).requestStop();
+    return self;
+  }
+
+  JNIEXPORT jobject JAVA_BIND(Interactor, triggerNotification)(
+    JNIEnv* env, jobject self, jstring desc, jstring value, jdouble duration)
+  {
+    const char* descStr = env->GetStringUTFChars(desc, nullptr);
+    std::string descCpp = descStr;
+    env->ReleaseStringUTFChars(desc, descStr);
+
+    const char* valueStr = env->GetStringUTFChars(value, nullptr);
+    std::string valueCpp = valueStr;
+    env->ReleaseStringUTFChars(value, valueStr);
+
+    GetInteractor(env, self).triggerNotification(valueCpp, valueCpp, duration);
     return self;
   }
 }

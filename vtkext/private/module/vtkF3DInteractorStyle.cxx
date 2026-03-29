@@ -2,6 +2,7 @@
 
 #include "F3DLog.h"
 #include "vtkF3DRenderer.h"
+#include "vtkF3DUserEvents.h"
 
 #include <vtkCamera.h>
 #include <vtkMath.h>
@@ -23,20 +24,17 @@ void vtkF3DInteractorStyle::OnLeftButtonDown()
     this->Interactor->GetEventPosition()[0], this->Interactor->GetEventPosition()[1]);
   assert(this->CurrentRenderer != nullptr);
 
-  if (this->Interactor->GetShiftKey())
+  if (this->InteractionMode == TWO_D || this->Interactor->GetShiftKey())
   {
     this->StartPan();
   }
+  else if (this->Interactor->GetControlKey())
+  {
+    this->StartSpin();
+  }
   else
   {
-    if (this->Interactor->GetControlKey())
-    {
-      this->StartSpin();
-    }
-    else
-    {
-      this->StartRotate();
-    }
+    this->StartRotate();
   }
 }
 
@@ -87,7 +85,7 @@ void vtkF3DInteractorStyle::OnRightButtonDown()
     this->Interactor->GetEventPosition()[0], this->Interactor->GetEventPosition()[1]);
   assert(this->CurrentRenderer != nullptr);
 
-  if (this->Interactor->GetShiftKey())
+  if (this->InteractionMode != TWO_D && this->Interactor->GetShiftKey())
   {
     this->StartEnvRotate();
   }
@@ -120,19 +118,19 @@ void vtkF3DInteractorStyle::OnDropFiles(vtkStringArray* files)
     F3DLog::Print(F3DLog::Severity::Warning, "Drop event without any provided files.");
     return;
   }
-  this->InvokeEvent(vtkF3DInteractorStyle::DropFilesEvent, files);
+  this->InvokeEvent(vtkF3DUserEvents::DropFilesEvent, files);
 }
 
 //----------------------------------------------------------------------------
 void vtkF3DInteractorStyle::OnKeyPress()
 {
-  this->InvokeEvent(vtkF3DInteractorStyle::KeyPressEvent, nullptr);
+  this->InvokeEvent(vtkF3DUserEvents::KeyPressEvent, nullptr);
 }
 
 //------------------------------------------------------------------------------
 void vtkF3DInteractorStyle::Rotate()
 {
-  if (this->CameraMovementDisabled)
+  if (this->CameraMovementDisabled || this->InteractionMode == TWO_D)
   {
     return;
   }
@@ -153,7 +151,7 @@ void vtkF3DInteractorStyle::Rotate()
 
   vtkCamera* camera = ren->GetActiveCamera();
 
-  if (!ren->GetUseTrackball())
+  if (this->InteractionMode != TRACKBALL)
   {
     double up[3];
     this->InterpolateTemporaryUp(0.1, ren->GetUpDirection(), up);
@@ -204,7 +202,7 @@ void vtkF3DInteractorStyle::Rotate()
 //----------------------------------------------------------------------------
 void vtkF3DInteractorStyle::Spin()
 {
-  if (this->CameraMovementDisabled)
+  if (this->CameraMovementDisabled || this->InteractionMode == TWO_D)
   {
     return;
   }

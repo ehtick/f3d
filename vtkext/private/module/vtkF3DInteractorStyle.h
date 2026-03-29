@@ -16,13 +16,19 @@ public:
   vtkTypeMacro(vtkF3DInteractorStyle, vtkInteractorStyleTrackballCamera);
 
   /**
-   * Custom events invoked by this class
+   * Interaction mode determining how mouse movements are mapped to camera actions.
    */
-  enum vtkCustomEvents
+  enum InteractionMode
   {
-    DropFilesEvent = vtkCommand::UserEvent + 100,
-    KeyPressEvent
+    DEFAULT = 0,
+    TRACKBALL = 1,
+    TWO_D = 2
   };
+
+  /**
+   * Set the interaction mode.
+   */
+  vtkSetMacro(InteractionMode, int);
 
   ///@{
   /**
@@ -122,14 +128,13 @@ protected:
    */
   void Dolly(double factor) override;
 
-  bool CameraMovementDisabled = false;
-
   /**
    * Decrement `TemporaryUpFactor` by `factorDelta`
    * and use it to interpolate `output` between `TemporaryUp` and `target`.
    */
   void InterpolateTemporaryUp(const double factorDelta, const double* target, double* output);
 
+private:
   /**
    * Temporary up vector to support rolled camera interaction
    */
@@ -139,6 +144,9 @@ protected:
    * Interpolation state for `TemporaryUp`
    */
   double TemporaryUpFactor = 1.0;
+
+  int InteractionMode = DEFAULT;
+  bool CameraMovementDisabled = false;
 };
 
 #endif

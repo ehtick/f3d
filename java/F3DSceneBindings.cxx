@@ -255,6 +255,30 @@ extern "C"
     return self;
   }
 
+  JNIEXPORT jobject JAVA_BIND(Scene, addBuffer)(JNIEnv* env, jobject self, jbyteArray buffer)
+  {
+    jsize bufferLen = env->GetArrayLength(buffer);
+    jbyte* bufferData = env->GetByteArrayElements(buffer, nullptr);
+    if (!bufferData || bufferLen <= 0)
+    {
+      return self;
+    }
+
+    try
+    {
+      GetEngine(env, self)->getScene().add(
+        reinterpret_cast<std::byte*>(bufferData), static_cast<size_t>(bufferLen));
+    }
+    catch (const std::exception& e)
+    {
+      jclass exceptionClass = env->FindClass("java/lang/RuntimeException");
+      env->ThrowNew(exceptionClass, e.what());
+      return nullptr;
+    }
+    env->ReleaseByteArrayElements(buffer, bufferData, 0);
+    return self;
+  }
+
   JNIEXPORT jobject JAVA_BIND(Scene, clear)(JNIEnv* env, jobject self)
   {
     GetEngine(env, self)->getScene().clear();
@@ -375,8 +399,27 @@ extern "C"
     return result;
   }
 
+  JNIEXPORT jdoubleArray JAVA_BIND(Scene, getAnimationKeyFrames)(JNIEnv* env, jobject self)
+  {
+    auto keyframeVec = GetEngine(env, self)->getScene().getAnimationKeyFrames();
+    jdoubleArray result = env->NewDoubleArray(keyframeVec.size());
+    const jdouble* keyframes = keyframeVec.data();
+    env->SetDoubleArrayRegion(result, 0, keyframeVec.size(), keyframes);
+    return result;
+  }
+
   JNIEXPORT jint JAVA_BIND(Scene, availableAnimations)(JNIEnv* env, jobject self)
   {
     return GetEngine(env, self)->getScene().availableAnimations();
+  }
+
+  JNIEXPORT jstring JAVA_BIND(Scene, getAnimationName)(JNIEnv* env, jobject self, jint index)
+  {
+    return env->NewStringUTF(GetEngine(env, self)->getScene().getAnimationName(index).c_str());
+  }
+
+  JNIEXPORT jobject JAVA_BIND(Scene, getAnimationNames)(JNIEnv* env, jobject self)
+  {
+    return CreateStringList(env, GetEngine(env, self)->getScene().getAnimationNames());
   }
 }

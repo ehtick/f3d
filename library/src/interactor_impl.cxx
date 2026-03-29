@@ -18,6 +18,7 @@
 #include "vtkF3DRenderer.h"
 #include "vtkF3DUIActor.h"
 #include "vtkF3DUIObserver.h"
+#include "vtkF3DUserEvents.h"
 
 #include <vtkCallbackCommand.h>
 #include <vtkCellPicker.h>
@@ -64,6 +65,7 @@ public:
     std::vector<std::string> CommandVector;
     documentation_callback_t DocumentationCallback;
     BindingType Type;
+    bool Notify;
   };
 
   struct CommandCallbacks
@@ -103,16 +105,14 @@ public:
 
     this->UIObserver->InstallObservers(this->VTKInteractor);
 
-    // observe console event to trigger commands
+    // observe UI event to trigger commands
     vtkNew<vtkCallbackCommand> commandCallback;
     commandCallback->SetClientData(this);
-    commandCallback->SetCallback(OnConsoleEvent);
-    vtkOutputWindow::GetInstance()->AddObserver(
-      vtkF3DConsoleOutputWindow::TriggerEvent, commandCallback);
-    vtkOutputWindow::GetInstance()->AddObserver(
-      vtkF3DConsoleOutputWindow::ShowEvent, commandCallback);
-    vtkOutputWindow::GetInstance()->AddObserver(
-      vtkF3DConsoleOutputWindow::HideEvent, commandCallback);
+    commandCallback->SetCallback(OnUIEvent);
+    vtkOutputWindow::GetInstance()->AddObserver(vtkF3DUserEvents::TriggerEvent, commandCallback);
+    vtkOutputWindow::GetInstance()->AddObserver(vtkF3DUserEvents::ShowEvent, commandCallback);
+    vtkOutputWindow::GetInstance()->AddObserver(vtkF3DUserEvents::HideEvent, commandCallback);
+    this->VTKInteractor->AddObserver(vtkF3DUserEvents::SceneHierarchyChangedEvent, commandCallback);
 
     // Disable standard interactor behavior with timer event
     // in order to be able to interact while animating
@@ -121,12 +121,12 @@ public:
     vtkNew<vtkCallbackCommand> keyPressCallback;
     keyPressCallback->SetClientData(this);
     keyPressCallback->SetCallback(OnKeyPress);
-    this->Style->AddObserver(vtkF3DInteractorStyle::KeyPressEvent, keyPressCallback);
+    this->Style->AddObserver(vtkF3DUserEvents::KeyPressEvent, keyPressCallback);
 
     vtkNew<vtkCallbackCommand> dropFilesCallback;
     dropFilesCallback->SetClientData(this);
     dropFilesCallback->SetCallback(OnDropFiles);
-    this->Style->AddObserver(vtkF3DInteractorStyle::DropFilesEvent, dropFilesCallback);
+    this->Style->AddObserver(vtkF3DUserEvents::DropFilesEvent, dropFilesCallback);
 
     vtkNew<vtkCallbackCommand> middleButtonPressCallback;
     middleButtonPressCallback->SetClientData(this);
@@ -187,6 +187,9 @@ public:
     VT_FRONT,
     VT_RIGHT,
     VT_TOP,
+    VT_BACK,
+    VT_BOTTOM,
+    VT_LEFT,
     VT_ISOMETRIC
   };
 
@@ -204,12 +207,22 @@ public:
       case ViewType::VT_FRONT:
         axis = { 0, +1, 0 };
         break;
+      case ViewType::VT_BACK:
+        axis = { 0, -1, 0 };
+        break;
       case ViewType::VT_RIGHT:
         axis = { +1, 0, 0 };
+        break;
+      case ViewType::VT_LEFT:
+        axis = { -1, 0, 0 };
         break;
       case ViewType::VT_TOP:
         axis = { 0, 0, +1 };
         up = { 0, -1, 0 };
+        break;
+      case ViewType::VT_BOTTOM:
+        axis = { 0, 0, -1 };
+        up = { 0, 1, 0 };
         break;
       case ViewType::VT_ISOMETRIC:
         axis = { -1, +1, +1 };
@@ -226,7 +239,7 @@ public:
     /* set camera coordinates back */
     cam.setPosition(newPos);
     cam.setViewUp(up);
-    cam.resetToBounds(0.9);
+    cam.resetToBounds();
   }
 
   //----------------------------------------------------------------------------
@@ -283,26 +296,31 @@ public:
   }
 
   //----------------------------------------------------------------------------
-  static void OnConsoleEvent(vtkObject*, unsigned long event, void* clientData, void* data)
+  static void OnUIEvent(vtkObject*, unsigned long event, void* clientData, void* data)
   {
     internals* self = static_cast<internals*>(clientData);
 
-    if (event == vtkF3DConsoleOutputWindow::TriggerEvent)
+    if (event == vtkF3DUserEvents::TriggerEvent)
     {
       const char* commandWithArgs = static_cast<const char*>(data);
       self->Interactor.SetCommandBuffer(commandWithArgs);
     }
-    else if (event == vtkF3DConsoleOutputWindow::ShowEvent)
+    else if (event == vtkF3DUserEvents::ShowEvent)
     {
       // Invoked when console badge is clicked
       self->Options.ui.console = true;
     }
-    else if (event == vtkF3DConsoleOutputWindow::HideEvent)
+    else if (event == vtkF3DUserEvents::HideEvent)
     {
       // Invoked when esc key is pressed while in minimal console or console display, or when
       // something is submitted to minimal console
       self->Options.ui.console = false;
       self->Options.ui.minimal_console = false;
+    }
+    else if (event == vtkF3DUserEvents::SceneHierarchyChangedEvent)
+    {
+      // Invoked when a node checkbox is toggled in the scene hierarchy
+      self->Window.UpdateActorsVisibility();
     }
 
     self->RenderRequested = true;
@@ -502,7 +520,11 @@ public:
 
     if (commandsIt != this->Bindings.end())
     {
-      for (const std::string& command : commandsIt->second.CommandVector)
+      // Copy by value: triggerCommand may call initBindings() which clears the Bindings map,
+      // invalidating any references/iterators into it.
+      const BindingCommands binding = commandsIt->second;
+
+      for (const std::string& command : binding.CommandVector)
       {
         std::string commandWithArgs = command;
         if (!argsString.empty())
@@ -521,6 +543,17 @@ public:
           log::error(
             "Interaction: error running command: \"" + commandWithArgs + "\": " + ex.what());
         }
+      }
+
+      if (binding.Notify && binding.DocumentationCallback)
+      {
+        // trigger notification
+        vtkRenderWindow* renWin = this->Window.GetRenderWindow();
+        vtkF3DRenderer* ren =
+          vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
+
+        auto [desc, value] = binding.DocumentationCallback();
+        ren->AddNotification(desc, value, bind.format(), 3.0);
       }
     }
 
@@ -620,6 +653,7 @@ public:
     vtkRenderWindow* renWin = this->Window.GetRenderWindow();
     vtkF3DRenderer* ren = vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
     ren->SetUIDeltaTime(deltaTime);
+    ren->SetTotalTime(ren->GetTotalTime() + deltaTime);
 
     // Determine if we need a full render or just a UI render
     // At the moment, only TAA requires a full render each frame
@@ -764,9 +798,9 @@ interactor_impl::interactor_impl(options& options, window_impl& window, scene_im
 //----------------------------------------------------------------------------
 interactor_impl::~interactor_impl()
 {
-  vtkOutputWindow::GetInstance()->RemoveObservers(vtkF3DConsoleOutputWindow::TriggerEvent);
-  vtkOutputWindow::GetInstance()->RemoveObservers(vtkF3DConsoleOutputWindow::ShowEvent);
-  vtkOutputWindow::GetInstance()->RemoveObservers(vtkF3DConsoleOutputWindow::HideEvent);
+  vtkOutputWindow::GetInstance()->RemoveObservers(vtkF3DUserEvents::TriggerEvent);
+  vtkOutputWindow::GetInstance()->RemoveObservers(vtkF3DUserEvents::ShowEvent);
+  vtkOutputWindow::GetInstance()->RemoveObservers(vtkF3DUserEvents::HideEvent);
 }
 
 //----------------------------------------------------------------------------
@@ -829,9 +863,10 @@ interactor& interactor_impl::initCommands()
   { return complNames(args, this->Internals->Options.getAllNames()); };
 
   static const std::map<std::string, std::vector<std::string>> COMPL_OPTIONS_SET = {
+    { "interactor.style", { "default", "trackball", "2d" } },
     { "model.point_sprites.type", { "sphere", "gaussian" } },
     { "render.effect.antialiasing.mode", { "fxaa", "ssaa", "taa" } },
-    { "render.effect.blending.mode", { "ddp", "sort", "stochastic" } },
+    { "render.effect.blending.mode", { "ddp", "sort", "sort_cpu", "stochastic" } },
   };
   auto complOptionSet = [&](const std::vector<std::string>& args)
   {
@@ -1007,6 +1042,10 @@ interactor& interactor_impl::initCommands()
         }
         else if (mode == "sort")
         {
+          mode = "sort_cpu";
+        }
+        else if (mode == "sort_cpu")
+        {
           mode = "stochastic";
         }
         else
@@ -1017,7 +1056,7 @@ interactor& interactor_impl::initCommands()
       this->Internals->Window.render();
     },
     command_documentation_t{
-      "cycle_blending", "cycle between the blending method (none,ddp,sort,stochastic)" });
+      "cycle_blending", "cycle between the blending method (none,ddp,sort,sort_cpu,stochastic)" });
 
   std::vector<std::string> cycleColoringValidArgs = { "field", "array", "component" };
   this->addCommand(
@@ -1060,31 +1099,42 @@ interactor& interactor_impl::initCommands()
     {
       bool& enabled = this->Internals->Options.model.point_sprites.enable;
       std::string& type = this->Internals->Options.model.point_sprites.type;
+
+      // C++20: use `std::to_array<std::string_view>` to avoid specifying the size explicitly
+      constexpr std::array<std::string_view, 6> validTypes = { "sphere", "gaussian", "circle",
+        "stddev", "bound", "cross" };
       if (!enabled)
       {
         enabled = true;
-        type = "sphere";
+        type = validTypes[0];
       }
       else
       {
-        if (type == "sphere")
+        auto index = std::distance(
+          std::begin(validTypes), std::find(std::begin(validTypes), std::end(validTypes), type));
+        if (static_cast<size_t>(index) == validTypes.size() - 1) // last type
         {
-          type = "gaussian";
+          enabled = false;
         }
         else
         {
-          enabled = false;
+          type = validTypes[index + 1];
         }
       }
       this->Internals->Window.render();
     },
-    command_documentation_t{
-      "cycle_point_sprites", "cycle between the point sprite types (none,sphere,gaussian)" });
+    command_documentation_t{ "cycle_point_sprites",
+      "cycle between the point sprite types "
+      "(none,sphere,gaussian,circle,stddev,bound,cross)" });
 
   this->addCommand(
     "roll_camera",
     [&](const std::vector<std::string>& args)
     {
+      if (this->Internals->Options.interactor.style == "2d")
+      {
+        return;
+      }
       check_args(args, 1, "roll_camera");
       this->Internals->Window.getCamera().roll(options::parse<int>(args[0]));
       this->Internals->Style->SetTemporaryUp(
@@ -1106,6 +1156,10 @@ interactor& interactor_impl::initCommands()
     "elevation_camera",
     [&](const std::vector<std::string>& args)
     {
+      if (this->Internals->Options.interactor.style == "2d")
+      {
+        return;
+      }
       check_args(args, 1, "elevation_camera");
       this->Internals->Window.getCamera().elevation(options::parse<int>(args[0]));
       this->Internals->Style->SetTemporaryUp(
@@ -1117,6 +1171,10 @@ interactor& interactor_impl::initCommands()
     "azimuth_camera",
     [&](const std::vector<std::string>& args)
     {
+      if (this->Internals->Options.interactor.style == "2d")
+      {
+        return;
+      }
       check_args(args, 1, "azimuth_camera");
       this->Internals->Window.getCamera().azimuth(options::parse<int>(args[0]));
       this->Internals->Style->SetTemporaryUp(
@@ -1177,6 +1235,10 @@ interactor& interactor_impl::initCommands()
     "set_camera",
     [&](const std::vector<std::string>& args)
     {
+      if (this->Internals->Options.interactor.style == "2d")
+      {
+        return;
+      }
       check_args(args, 1, "set_camera");
       std::string_view type = args[0];
       if (type == "front")
@@ -1194,6 +1256,21 @@ interactor& interactor_impl::initCommands()
         this->Internals->SetViewOrbit(internals::ViewType::VT_RIGHT);
         this->Internals->Style->ResetTemporaryUp();
       }
+      else if (type == "back")
+      {
+        this->Internals->SetViewOrbit(internals::ViewType::VT_BACK);
+        this->Internals->Style->ResetTemporaryUp();
+      }
+      else if (type == "bottom")
+      {
+        this->Internals->SetViewOrbit(internals::ViewType::VT_BOTTOM);
+        this->Internals->Style->ResetTemporaryUp();
+      }
+      else if (type == "left")
+      {
+        this->Internals->SetViewOrbit(internals::ViewType::VT_LEFT);
+        this->Internals->Style->ResetTemporaryUp();
+      }
       else if (type == "isometric")
       {
         this->Internals->SetViewOrbit(internals::ViewType::VT_ISOMETRIC);
@@ -1205,10 +1282,10 @@ interactor& interactor_impl::initCommands()
           std::string("Command: set_camera arg:\"") + std::string(type) + "\" is not recognized.");
       }
     },
-    command_documentation_t{
-      "set_camera front/top/right/isometric", "position the camera in the specified location" },
+    command_documentation_t{ "set_camera front/top/right/back/bottom/left/isometric",
+      "position the camera in the specified location" },
     std::bind(complNames, std::placeholders::_1,
-      std::vector<std::string>{ "front", "top", "right", "isometric" }));
+      std::vector<std::string>{ "front", "top", "right", "back", "bottom", "left", "isometric" }));
 
   this->addCommand(
     "toggle_volume_rendering",
@@ -1222,6 +1299,28 @@ interactor& interactor_impl::initCommands()
       "toggle_volume_rendering", "toggle model.volume.enable and print coloring information" });
 
   this->addCommand(
+    "cycle_interactor_style",
+    [&](const std::vector<std::string>&)
+    {
+      auto& style = this->Internals->Options.interactor.style;
+      if (style == "default")
+      {
+        style = "trackball";
+      }
+      else if (style == "trackball")
+      {
+        style = "2d";
+      }
+      else
+      {
+        style = "default";
+      }
+      this->Internals->Window.render();
+    },
+    command_documentation_t{
+      "cycle_interactor_style", "cycle between interaction styles (default, trackball, 2d)" });
+
+  this->addCommand(
     "stop_interactor", [&](const std::vector<std::string>&) { this->stop(); },
     command_documentation_t{ "stop_interactor", "stop the interactor hence quit the application" });
 
@@ -1233,6 +1332,17 @@ interactor& interactor_impl::initCommands()
       this->Internals->Style->ResetTemporaryUp();
     },
     command_documentation_t{ "reset_camera", "reset the camera to its original location" });
+
+  this->addCommand(
+    "jump_to_keyframe",
+    [&](const std::vector<std::string>& args)
+    {
+      check_args(args, 2, "jump_to_keyframe");
+      int keyframe = options::parse<int>(args[0]);
+      bool relative = options::parse<bool>(args[1]);
+      this->Internals->AnimationManager->JumpToKeyFrame(keyframe, relative);
+    },
+    command_documentation_t{ "jump_to_keyframe", "Jump to animation's key frame" });
 
   this->addCommand(
     "toggle_animation", [&](const std::vector<std::string>&) { this->toggleAnimation(); },
@@ -1540,8 +1650,9 @@ interactor& interactor_impl::initBindings()
     return std::pair("Color component", ren->ComponentToString(opts.model.scivis.component));
   };
 
-  // "doc", ""
-  auto docStr = [](const std::string& doc) { return std::pair(doc, ""); };
+  // "doc", "value"
+  auto docStr = [](const std::string& doc, const std::string& val = "")
+  { return std::pair(doc, val); };
 
   // "doc", "value"
   auto docDbl = [](const std::string& doc, const double& val)
@@ -1603,6 +1714,7 @@ interactor& interactor_impl::initBindings()
   this->addBinding({mod_t::NONE, "N"}, "toggle ui.filename","Scene", std::bind(docTgl, "Filename", std::cref(opts.ui.filename)), f3d::interactor::BindingType::TOGGLE);
   this->addBinding({mod_t::NONE, "M"}, "toggle ui.metadata","Scene", std::bind(docTgl, "Metadata", std::cref(opts.ui.metadata)), f3d::interactor::BindingType::TOGGLE);
   this->addBinding({mod_t::SHIFT, "N"}, "toggle ui.hdri_filename","Scene", std::bind(docTgl, "HDRI filename", std::cref(opts.ui.hdri_filename)), f3d::interactor::BindingType::TOGGLE);
+  this->addBinding({mod_t::SHIFT, "H"}, "toggle ui.scene_hierarchy","Scene", std::bind(docTgl, "Scene hierarchy", std::cref(opts.ui.scene_hierarchy)), f3d::interactor::BindingType::TOGGLE);
   this->addBinding({mod_t::NONE, "Z"}, "toggle ui.fps","Scene", std::bind(docTgl, "FPS Counter", std::cref(opts.ui.fps)), f3d::interactor::BindingType::TOGGLE);
 #endif
 #if F3D_MODULE_RAYTRACING
@@ -1611,9 +1723,10 @@ interactor& interactor_impl::initBindings()
 #endif
   this->addBinding({mod_t::NONE, "V"}, "toggle_volume_rendering","Scene", std::bind(docTgl, "Volume rendering", std::cref(opts.model.volume.enable)), f3d::interactor::BindingType::TOGGLE);
   this->addBinding({mod_t::NONE, "I"}, "toggle model.volume.inverse","Scene", std::bind(docTgl, "Inverse volume opacity", std::cref(opts.model.volume.inverse)), f3d::interactor::BindingType::TOGGLE);
+  this->addBinding({mod_t::CTRL, "N"}, "toggle model.normal_glyphs.enable","Scene", std::bind(docTgl, "Normal glyphs", std::cref(opts.model.normal_glyphs.enable)), f3d::interactor::BindingType::TOGGLE);
   this->addBinding({mod_t::NONE, "O"}, "cycle_point_sprites","Scene", docPS, f3d::interactor::BindingType::CYCLIC);
   this->addBinding({mod_t::NONE, "U"}, "toggle render.background.blur.enable","Scene", std::bind(docTgl, "Blur background", std::cref(opts.render.background.blur.enable)), f3d::interactor::BindingType::TOGGLE);
-  this->addBinding({mod_t::NONE, "K"}, "toggle interactor.trackball","Scene", std::bind(docTgl, "Trackball interaction", std::cref(opts.interactor.trackball)), f3d::interactor::BindingType::TOGGLE);
+  this->addBinding({mod_t::NONE, "K"}, "cycle_interactor_style","Scene", std::bind(docStr, "Interaction style", std::cref(opts.interactor.style)), f3d::interactor::BindingType::CYCLIC);
   this->addBinding({mod_t::NONE, "F"}, "toggle render.hdri.ambient","Scene", std::bind(docTgl, "HDRI ambient lighting", std::cref(opts.render.hdri.ambient)), f3d::interactor::BindingType::TOGGLE);
   this->addBinding({mod_t::NONE, "J"}, "toggle render.background.skybox","Scene", std::bind(docTgl, "HDRI skybox", std::cref(opts.render.background.skybox)), f3d::interactor::BindingType::TOGGLE);
   this->addBinding({mod_t::NONE, "L"}, "increase_light_intensity", "Scene", std::bind(docDbl, "Increase lights intensity", std::cref(opts.render.light.intensity)), f3d::interactor::BindingType::NUMERICAL);
@@ -1633,15 +1746,16 @@ interactor& interactor_impl::initBindings()
   this->addBinding({mod_t::CTRL, "Y"}, "set scene.up_direction +Y", "Scene", std::bind(docStr, "Set scene up direction to +Y"));
   this->addBinding({mod_t::CTRL, "Z"}, "set scene.up_direction +Z", "Scene", std::bind(docStr, "Set scene up direction to +Z"));
 #if F3D_MODULE_UI
-  this->addBinding({mod_t::NONE, "H"}, "toggle ui.cheatsheet", "Others", std::bind(docStr, "Cheatsheet"));
-  this->addBinding({mod_t::NONE, "Escape"}, "toggle ui.console", "Others", std::bind(docStr, "Console"));
-  this->addBinding({mod_t::ANY, "Colon"}, "toggle ui.minimal_console", "Others", std::bind(docStr, "Minimal console"));
+  this->addBinding({mod_t::NONE, "H"}, "toggle ui.cheatsheet", "Others", std::bind(docStr, "Cheatsheet"), f3d::interactor::BindingType::OTHER, true);
+  this->addBinding({mod_t::NONE, "Escape"}, "toggle ui.console", "Others", std::bind(docStr, "Console"), f3d::interactor::BindingType::OTHER, true);
+  this->addBinding({mod_t::ANY, "Colon"}, "toggle ui.minimal_console", "Others", std::bind(docStr, "Minimal console"), f3d::interactor::BindingType::OTHER, true);
+  this->addBinding({mod_t::CTRL, "K"}, "toggle ui.notifications.enable", "Others", std::bind(docTgl, "Notifications", std::cref(opts.ui.notifications.enable)), f3d::interactor::BindingType::TOGGLE);
 #endif
-  this->addBinding({mod_t::CTRL, "Q"}, "stop_interactor", "Others", std::bind(docStr, "Stop the interactor"));
+  this->addBinding({mod_t::CTRL, "Q"}, "stop_interactor", "Others", std::bind(docStr, "Stop the interactor"), f3d::interactor::BindingType::OTHER, true);
   this->addBinding({mod_t::NONE, "Return"}, "reset_camera", "Others", std::bind(docStr, "Reset camera to initial parameters"));
   this->addBinding({mod_t::NONE, "Space"}, "toggle_animation", "Others", std::bind(docStr, "Play/Pause animation if any"));
   this->addBinding({mod_t::CTRL_SHIFT, "Space"}, "toggle_animation_backward", "Others", std::bind(docStr, "Play/Pause animation backward if any"));
-  this->addBinding({mod_t::NONE, "Drop"}, "add_files", "Others", std::bind(docStr, "Add files to the scene"));
+  this->addBinding({mod_t::NONE, "Drop"}, "add_files", "Others", std::bind(docStr, "Add files to the scene"), f3d::interactor::BindingType::OTHER, true);
   this->addBinding({mod_t::SHIFT, "V"}, "cycle_verbose_level", "Others", docVerbose, f3d::interactor::BindingType::CYCLIC);
   // clang-format on
 
@@ -1651,10 +1765,10 @@ interactor& interactor_impl::initBindings()
 //----------------------------------------------------------------------------
 interactor& interactor_impl::addBinding(const interaction_bind_t& bind,
   std::vector<std::string> commands, std::string group,
-  documentation_callback_t documentationCallback, BindingType type)
+  documentation_callback_t documentationCallback, BindingType type, bool notify)
 {
   const auto [it, success] = this->Internals->Bindings.insert(
-    { bind, { std::move(commands), std::move(documentationCallback), type } });
+    { bind, { std::move(commands), std::move(documentationCallback), type, notify } });
   if (!success)
   {
     throw interactor::already_exists_exception(
@@ -1676,10 +1790,10 @@ interactor& interactor_impl::addBinding(const interaction_bind_t& bind,
 
 //----------------------------------------------------------------------------
 interactor& interactor_impl::addBinding(const interaction_bind_t& bind, std::string command,
-  std::string group, documentation_callback_t documentationCallback, BindingType type)
+  std::string group, documentation_callback_t documentationCallback, BindingType type, bool notify)
 {
   return this->addBinding(bind, std::vector<std::string>{ std::move(command) }, std::move(group),
-    std::move(documentationCallback), type);
+    std::move(documentationCallback), type, notify);
 }
 
 //----------------------------------------------------------------------------
@@ -1768,6 +1882,21 @@ f3d::interactor::BindingType interactor_impl::getBindingType(const interaction_b
       std::string("Bind: ") + bind.format() + " does not exists");
   }
   return it->second.Type;
+}
+
+//----------------------------------------------------------------------------
+interactor& interactor_impl::triggerNotification(
+  std::string desc, std::string value, double duration)
+{
+  if (!desc.empty())
+  {
+    vtkRenderWindow* renWin = this->Internals->Window.GetRenderWindow();
+    vtkF3DRenderer* ren = vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
+
+    ren->AddNotification(desc, value, {}, duration);
+  }
+
+  return *this;
 }
 
 //----------------------------------------------------------------------------

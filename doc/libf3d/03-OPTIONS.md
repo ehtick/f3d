@@ -61,7 +61,7 @@ CLI: `--up`.
 
 ### `scene.force_reader` (_string_, optional, **on load**)
 
-Force a specific reader to be used, disregarding the file extension. See [user documentation](../user/02-SUPPORTED_FORMATS.md).
+Force a specific reader to be used, disregarding the file extension and file content. See [user documentation](../user/02-SUPPORTED_FORMATS.md).
 
 CLI: `--force-reader`.
 
@@ -73,11 +73,11 @@ CLI: `--camera-orthographic`.
 
 ## Interactor Options
 
-### `interactor.trackball` (_bool_, default: `false`)
+### `interactor.style` (_string_, default: `default`)
 
-Enable trackball interaction.
+Set the interaction style. `default` uses standard 3D interaction, `trackball` enables trackball interaction, `2d` enables 2D interaction mode (pan/zoom only, no rotation). In `2d` mode, camera commands (`set_camera`, `roll_camera`, `elevation_camera`, `azimuth_camera`) are disabled.
 
-CLI: `--trackball`.
+CLI: `--interaction-style`.
 
 ### `interactor.invert_zoom` (_bool_, default: `false`)
 
@@ -147,6 +147,10 @@ Path to a texture file that sets the Occlusion, Roughness and Metallic values of
 
 CLI: `--texture-material`.
 
+### `model.normal_glyphs.enable` (_bool_, default: `false`)
+
+Render vertex normals as arrows on top of the geometry.
+
 ### `model.normal.scale` (_double_, optional)
 
 Normal scale affects the strength of the normal deviation from the normal texture. Model-specified by default.
@@ -159,6 +163,12 @@ Path to a texture file that sets the normal map of the object. Model-specified b
 
 CLI: `--texture-normal`.
 
+### `model.checkerboard.enable` (_bool_, default: `false`, **on load**)
+
+Override model's texture with a checkerboard texture.
+
+CLI: `--checkerboard`.
+
 ### `model.scivis.enable` (_bool_, default: `false`)
 
 _Color by an array_ present in on the data. If `model.scivis.array_name` is not set, the first available array will be used.
@@ -169,7 +179,7 @@ CLI: `--scalar-coloring`.
 
 Color the data with value found _on the cells_ instead of points
 
-CLI: `--cells`.
+CLI: `--coloring-by-cells`.
 
 ### `model.scivis.discretization` (_int_, optional)
 
@@ -183,11 +193,18 @@ Set a _custom colormap for the coloring_.See [colormap parsing](../user/08-PARSI
 
 CLI: `--colormap`.
 
+### `model.scivis.opacity_map` (_opacity_map_, default: "0.0,0.0,1.0,1.0")
+
+Set a _custom opacity map for the coloring_. The format of the opacity map should be `val, opacity, ...`.
+It is only used for volume rendering currently.
+
+CLI: `--volume-opacity-map`.
+
 ### `model.scivis.component` (_int_, default: `-1`)
 
 Specify the component to color with. `-1` means _magnitude_. `-2` means _direct values_.
 
-CLI: `--comp`.
+CLI: `--coloring-component`.
 
 ### `model.scivis.array_name` (_string_, optional)
 
@@ -199,7 +216,7 @@ CLI: `--coloring-array`.
 
 Set the _coloring range_. Automatically computed by default.
 
-CLI: `--range`.
+CLI: `--coloring-range`.
 
 ### `model.point_sprites.enable` (_bool_, default: `false`)
 
@@ -209,7 +226,7 @@ CLI: `--point-sprites`.
 
 ### `model.point_sprites.type` (_string_, default: `sphere`)
 
-Set the sprites type when showing point sprites (can be `sphere` or `gaussian`).
+Set the sprites type when showing point sprites (can be `sphere`, `gaussian`, `circle`, `stddev`, `bound` or `cross`).
 
 CLI: `--point-sprites`.
 
@@ -235,7 +252,7 @@ CLI: `--volume`.
 
 Inverse the linear opacity function.
 
-CLI: `--inverse`.
+CLI: `--volume-inverse`.
 
 ### `model.textures_transform` (_transform2d_, optional)
 
@@ -253,7 +270,7 @@ CLI: `--blending`.
 
 ### `render.effect.blending.mode` (_string_, default: `ddp`)
 
-Set the blending technique. Valid options are: `ddp` (dual depth peeling, quality), `sort` (only for gaussians), `stochastic` (fast)
+Set the blending technique. Valid options are: `ddp` (dual depth peeling, quality), `sort` (only for gaussians), `sort_cpu` (only for gaussians, slow), `stochastic` (fast)
 
 CLI: `--blending`.
 
@@ -286,6 +303,13 @@ CLI: `--tone-mapping`.
 Add a final shader to the output image. See [user documentation](../user/10-FINAL_SHADER.md).
 
 CLI: `--final-shader`
+
+### `render.effect.display_depth` (_bool_, default: `false`)
+
+Display the depth buffer as a grayscale image or with a colormap if `model.scivis.enable` is specified.
+Only opaque objects are displayed, translucent and volumetric objects are ignored.
+
+CLI: `--display-depth`
 
 ### `render.line_width` (_double_, optional)
 
@@ -357,13 +381,13 @@ CLI: `--raytracing`.
 
 The number of _samples per pixel_.
 
-CLI: `--samples`.
+CLI: `--raytracing-samples`.
 
 ### `render.raytracing.denoise` (_bool_, default: `false`)
 
 _Denoise_ the raytracing rendering.
 
-CLI: `--denoise`.
+CLI: `--raytracing-denoise`.
 
 ### `render.hdri.file` (_path_, optional)
 
@@ -448,7 +472,7 @@ CLI: `--z-color`.
 
 Show _scalar bar_ of the coloring by data array.
 
-CLI: `--bar`.
+CLI: `--coloring-scalar-bar`.
 
 ### `ui.cheatsheet` (_bool_, default: `false`)
 
@@ -489,6 +513,19 @@ Scale fonts. Useful for HiDPI displays.
 
 CLI: `--font-scale`.
 
+### `ui.font_color` (_color_, default: `0.957,0.957,0.957`)
+
+Set font color.
+
+CLI: `--font-color`.
+
+### `ui.dpi_aware` (_bool_, default: `false`)
+
+Scale the _font scale_ and _resolution_ by the display scaling factor.
+Only supported on Windows platform.
+
+CLI: `--dpi-aware`.
+
 ### `ui.fps` (_bool_, default: `false`)
 
 Display a _frame per second counter_.
@@ -499,11 +536,11 @@ CLI: `--fps`.
 
 Show a _progress bar_ when loading the file.
 
+CLI: `--loading-progress`.
+
 ### `ui.loader_progress_color` (_color_, optional, **on load**)
 
 Set loader progress bar color or use default one #FFFFFF if not set.
-
-CLI: `--progress`.
 
 ### `ui.animation_progress` (_bool_, default: `false`, **on load**)
 
@@ -538,6 +575,23 @@ Display the logo. Needs ui.drop_zone.enable to be true.
 Set the opacity of the backdrop behind the UI elements. Value is between 0.0 (fully transparent) and 1.0 (fully opaque).
 
 CLI: `--backdrop-opacity`.
+
+### `ui.scene_hierarchy` (_bool_, default: `false`)
+
+Display the _scene hierarchy_ as a tree representing the internal structure of the model, with checkboxes allowing to hide or show individual parts.
+By default the tree is only expanded enough to show nodes that have meaningful names, but all nodes can be fully expanded manually.
+
+CLI: `--scene-hierarchy`.
+
+### `ui.notifications.enable` (_bool_, default: `false`)
+
+Show notifications at the bottom left of the viewport.
+
+CLI: `--notifications`.
+
+### `ui.notifications.show_bindings` (_bool_, default: `false`)
+
+Show corresponding keys when notifications are triggered by bindings key press events.
 
 # APIs
 

@@ -6,8 +6,15 @@
 #include "vtkF3DImguiConsole.h"
 #include "vtkF3DImguiFS.h"
 #include "vtkF3DImguiVS.h"
+#include "vtkF3DRenderer.h"
+#include "vtkF3DUserEvents.h"
 
+#include <vtkCallbackCommand.h>
+#include <vtkCommand.h>
+#include <vtkDataAssembly.h>
+#include <vtkDataAssemblyVisitor.h>
 #include <vtkImageData.h>
+#include <vtkInformation.h>
 #include <vtkObjectFactory.h>
 #include <vtkOpenGLBufferObject.h>
 #include <vtkOpenGLRenderWindow.h>
@@ -16,8 +23,11 @@
 #include <vtkOpenGLVertexArrayObject.h>
 #include <vtkPNGReader.h>
 #include <vtkRenderWindowInteractor.h>
+#include <vtkRenderer.h>
+#include <vtkRendererCollection.h>
 #include <vtkShader.h>
 #include <vtkShaderProgram.h>
+#include <vtkSmartPointer.h>
 #include <vtkTextureObject.h>
 #include <vtkVersion.h>
 
@@ -32,6 +42,11 @@
 #endif
 
 #include <imgui.h>
+
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <functional>
 #include <numeric>
 #include <optional>
 #include <sstream>
@@ -46,6 +61,12 @@ constexpr float DROPZONE_MARGIN = 0.5f;
 constexpr float DROPZONE_PADDING_X = 5.0f;
 constexpr float DROPZONE_PADDING_Y = 2.0f;
 
+const inline ImVec4 ColorToImVec4(const std::array<double, 3>& color)
+{
+  return ImVec4{ static_cast<float>(color[0]), static_cast<float>(color[1]),
+    static_cast<float>(color[2]), 1.0f };
+}
+
 static std::vector<std::string> SplitBindings(const std::string& s, const char delim)
 {
   std::vector<std::string> result;
@@ -59,6 +80,164 @@ static std::vector<std::string> SplitBindings(const std::string& s, const char d
 
   return result;
 }
+
+/**
+ * Visitor used to traverse a subtree when a checkbox is toggled.
+ * It will add an attribute `f3d_visible` on each node to the value of the checkbox.
+ * It will also add (or remove) a `ACTOR_HIDDEN()` information key on nodes associated with actors.
+ */
+class vtkF3DVisibilityDataAssemblyVisitor : public vtkDataAssemblyVisitor
+{
+public:
+  static vtkF3DVisibilityDataAssemblyVisitor* New();
+  vtkTypeMacro(vtkF3DVisibilityDataAssemblyVisitor, vtkDataAssemblyVisitor);
+
+  void SetVisibleAttribute(int visible)
+  {
+    this->Visible = visible;
+  }
+
+  void SetImporter(vtkImporter* importer)
+  {
+    this->Importer = importer;
+  }
+
+protected:
+  void Visit(int nodeid) override
+  {
+    // add the visibility state in the current node
+    // `GetAssembly()` is a const method, but we need to modify it, so the cast is needed
+    vtkDataAssembly* mutableAssembly = const_cast<vtkDataAssembly*>(this->GetAssembly());
+    mutableAssembly->SetAttribute(nodeid, "f3d_visible", this->Visible);
+
+#if VTK_VERSION_NUMBER >= VTK_VERSION_CHECK(9, 3, 20240707)
+    const int flatActorIndex =
+      this->GetAssembly()->GetAttributeOrDefault(nodeid, "flat_actor_id", -1);
+
+    if (flatActorIndex >= 0)
+    {
+      vtkActorCollection* actors = this->Importer->GetImportedActors();
+      vtkActor* actor = vtkActor::SafeDownCast(actors->GetItemAsObject(flatActorIndex));
+
+      vtkSmartPointer<vtkInformation> keys = actor->GetPropertyKeys();
+
+      // if there's no property keys yet, create one
+      if (!keys)
+      {
+        keys = vtkSmartPointer<vtkInformation>::New();
+        actor->SetPropertyKeys(keys);
+      }
+
+      // this key will be used in the renderer to know if the actor rendering should be skipped
+      if (this->Visible == 1)
+      {
+        keys->Remove(vtkF3DMetaImporter::ACTOR_HIDDEN());
+      }
+      else
+      {
+        keys->Set(vtkF3DMetaImporter::ACTOR_HIDDEN(), 1);
+      }
+    }
+#endif
+  }
+
+private:
+  int Visible = 0;
+  vtkImporter* Importer = nullptr;
+};
+vtkStandardNewMacro(vtkF3DVisibilityDataAssemblyVisitor);
+
+/**
+ * Visitor used to traverse a full tree (one per importer).
+ * It will take care of rendering the tree with imgui.
+ * If a checkbox is toggled, it triggers another traversal of a subtree to change the internal
+ * state.
+ */
+class vtkF3DRenderDataAssemblyVisitor : public vtkDataAssemblyVisitor
+{
+public:
+  static vtkF3DRenderDataAssemblyVisitor* New();
+  vtkTypeMacro(vtkF3DRenderDataAssemblyVisitor, vtkDataAssemblyVisitor);
+
+  void SetRenderWindow(vtkOpenGLRenderWindow* renWin)
+  {
+    this->RenderWindow = renWin;
+  }
+
+  void SetImporter(vtkImporter* importer)
+  {
+    this->Importer = importer;
+  }
+
+  void SetImporterIndex(int index)
+  {
+    this->ImporterId = index;
+  }
+
+protected:
+  void EndSubTree(int vtkNotUsed(nodeid)) override
+  {
+    ImGui::TreePop();
+  }
+
+  bool GetTraverseSubtree(int vtkNotUsed(nodeid)) override
+  {
+    return this->CurrentNodeOpened;
+  }
+
+  void Visit(int nodeid) override
+  {
+    int flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DrawLinesToNodes;
+
+    if (!this->GetAssembly()->GetAttributeOrDefault(nodeid, "f3d_collapsed", 0))
+    {
+      flags |= ImGuiTreeNodeFlags_DefaultOpen;
+    }
+
+    if (this->GetAssembly()->GetNumberOfChildren(nodeid) == 0)
+    {
+      flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet;
+    }
+
+    // this is only used internally by imgui, it must be unique
+    const int uuid = (this->ImporterId << 16) + nodeid;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    this->CurrentNodeOpened = ImGui::TreeNodeEx(("##tree_" + std::to_string(uuid)).c_str(), flags);
+
+    ImGui::SameLine();
+
+    // get the current visibility state
+    bool visible = (this->GetAssembly()->GetAttributeOrDefault(nodeid, "f3d_visible", 1) != 0);
+
+    const char* defaultLabel =
+      this->GetAssembly()->GetNumberOfChildren(nodeid) > 0 ? "<group>" : "<object>";
+
+    ImGui::PushID(uuid);
+    if (ImGui::Checkbox(
+          this->GetAssembly()->GetAttributeOrDefault(nodeid, "label", defaultLabel), &visible))
+    {
+      // if the checkbox is toggled, trigger a traversal of the subtree to change each node state
+      vtkNew<vtkF3DVisibilityDataAssemblyVisitor> attrVisitor;
+      attrVisitor->SetImporter(this->Importer);
+      attrVisitor->SetVisibleAttribute(visible ? 1 : 0);
+      this->GetAssembly()->Visit(nodeid, attrVisitor);
+
+      this->RenderWindow->GetInteractor()->InvokeEvent(
+        vtkF3DUserEvents::SceneHierarchyChangedEvent, nullptr);
+    }
+
+    ImGui::PopID();
+    ImGui::PopStyleVar();
+  }
+
+private:
+  bool CurrentNodeOpened = true;
+  vtkOpenGLRenderWindow* RenderWindow = nullptr;
+  vtkImporter* Importer = nullptr;
+  int ImporterId = -1;
+};
+vtkStandardNewMacro(vtkF3DRenderDataAssemblyVisitor);
 
 }
 
@@ -273,6 +452,18 @@ struct vtkF3DImguiActor::Internals
   vtkSmartPointer<vtkOpenGLBufferObject> IndexBuffer;
   vtkSmartPointer<vtkShaderProgram> Program;
   vtkSmartPointer<vtkTextureObject> LogoTexture;
+
+  enum class SearchMode : std::uint8_t
+  {
+    Description,
+    Keybind
+  };
+
+  std::array<char, 256> SearchFilter = {};
+  SearchMode CurrentSearchMode = SearchMode::Description;
+  bool SearchFocusRequested = false;
+  float CheatSheetWidth = 0.f;
+  std::map<std::string, ImFont*> ExtraFonts;
 };
 
 namespace
@@ -329,17 +520,24 @@ void vtkF3DImguiActor::Initialize(vtkOpenGLRenderWindow* renWin)
     // ImGui API is not very helpful with this
     fontConfig.FontDataOwnedByAtlas = false;
     font = io.Fonts->AddFontFromMemoryTTF(
-      const_cast<void*>(reinterpret_cast<const void*>(F3DFontBuffer)), sizeof(F3DFontBuffer), 18,
-      &fontConfig, ranges.Data);
+      const_cast<void*>(reinterpret_cast<const void*>(F3DFontBuffer)), sizeof(F3DFontBuffer),
+      18 * this->FontScale, &fontConfig, ranges.Data);
+    ImFont* notiFont = io.Fonts->AddFontFromMemoryTTF(
+      const_cast<void*>(reinterpret_cast<const void*>(F3DFontBuffer)), sizeof(F3DFontBuffer),
+      18 * this->FontScale * .8f, &fontConfig, ranges.Data);
+    Pimpl->ExtraFonts["notiFont"] = notiFont;
   }
   else
   {
-    font = io.Fonts->AddFontFromFileTTF(this->FontFile.c_str(), 18, &fontConfig, ranges.Data);
+    font = io.Fonts->AddFontFromFileTTF(
+      this->FontFile.c_str(), 18 * this->FontScale, &fontConfig, ranges.Data);
+    ImFont* notiFont = io.Fonts->AddFontFromFileTTF(
+      this->FontFile.c_str(), 18 * this->FontScale * .8f, &fontConfig, ranges.Data);
+    Pimpl->ExtraFonts["notiFont"] = notiFont;
   }
 
   io.Fonts->Build();
   io.FontDefault = font;
-  io.FontGlobalScale = this->FontScale;
 
   ImVec4 colTransparent = ImVec4(0.0f, 0.0f, 0.0f, 0.0f); // #000000
 
@@ -353,7 +551,8 @@ void vtkF3DImguiActor::Initialize(vtkOpenGLRenderWindow* renWin)
   style->WindowBorderSize = 0.f;
   style->WindowPadding = ImVec2(10, 10);
   style->WindowRounding = 8.f;
-  style->Colors[ImGuiCol_Text] = F3DStyle::imgui::GetTextColor();
+  style->ScaleAllSizes(this->FontScale);
+  style->Colors[ImGuiCol_Text] = ::ColorToImVec4(this->FontColor);
   style->Colors[ImGuiCol_WindowBg] = F3DStyle::imgui::GetBackgroundColor();
   style->Colors[ImGuiCol_FrameBg] = colTransparent;
   style->Colors[ImGuiCol_FrameBgActive] = colTransparent;
@@ -362,6 +561,10 @@ void vtkF3DImguiActor::Initialize(vtkOpenGLRenderWindow* renWin)
   style->Colors[ImGuiCol_ScrollbarGrabHovered] = F3DStyle::imgui::GetHighlightColor();
   style->Colors[ImGuiCol_ScrollbarGrabActive] = F3DStyle::imgui::GetHighlightColor();
   style->Colors[ImGuiCol_TextSelectedBg] = F3DStyle::imgui::GetHighlightColor();
+  style->Colors[ImGuiCol_CheckMark] = F3DStyle::imgui::GetHighlightColor();
+  style->Colors[ImGuiCol_ResizeGrip] = F3DStyle::imgui::GetMidColor();
+  style->Colors[ImGuiCol_ResizeGripHovered] = F3DStyle::imgui::GetHighlightColor();
+  style->Colors[ImGuiCol_ResizeGripActive] = F3DStyle::imgui::GetHighlightColor();
 
   // Setup backend name
   io.BackendPlatformName = io.BackendRendererName = "F3D/VTK";
@@ -371,12 +574,60 @@ void vtkF3DImguiActor::Initialize(vtkOpenGLRenderWindow* renWin)
 void vtkF3DImguiActor::ReleaseGraphicsResources(vtkWindow* w)
 {
   this->Superclass::ReleaseGraphicsResources(w);
-
   this->Pimpl->Release(vtkOpenGLRenderWindow::SafeDownCast(w));
 }
 
 //----------------------------------------------------------------------------
 vtkF3DImguiActor::~vtkF3DImguiActor() = default;
+
+//----------------------------------------------------------------------------
+void vtkF3DImguiActor::RenderSceneHierarchy(vtkOpenGLRenderWindow* renWin)
+{
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  assert(viewport);
+
+  constexpr float margin = F3DStyle::GetDefaultMargin();
+  constexpr float defaultWidth = 200.f;
+  float winHeight = viewport->WorkSize.y - 2.0f * margin;
+
+  float posX = margin;
+
+  if (this->CheatSheetVisible)
+  {
+    posX += this->Pimpl->CheatSheetWidth + margin;
+  }
+
+  ImGui::SetNextWindowPos(ImVec2(posX, margin));
+  ImGui::SetNextWindowSize(ImVec2(defaultWidth, winHeight), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSizeConstraints(
+    ImVec2(10.f, winHeight), ImVec2(std::numeric_limits<float>::max(), winHeight));
+  ImGui::SetNextWindowBgAlpha(this->BackdropOpacity);
+
+  ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_HorizontalScrollbar;
+
+  ImGui::Begin("Scene Hierarchy", nullptr, flags);
+
+  vtkF3DRenderer* ren = vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
+  assert(ren != nullptr);
+
+  vtkF3DMetaImporter* importer = ren->GetMetaImporter();
+  assert(importer != nullptr);
+
+  for (int i = 0; i < importer->GetImporterInfoCount(); i++)
+  {
+    vtkF3DMetaImporter::ImporterInfo info = importer->GetImporterInfo(i);
+
+    vtkNew<::vtkF3DRenderDataAssemblyVisitor> visitor;
+    visitor->SetRenderWindow(renWin);
+    visitor->SetImporter(info.Importer);
+    visitor->SetImporterIndex(i);
+
+    info.DataAssembly->Visit(vtkDataAssembly::GetRootNode(), visitor);
+  }
+
+  ImGui::End();
+}
 
 //----------------------------------------------------------------------------
 void vtkF3DImguiActor::RenderDropZone()
@@ -390,7 +641,7 @@ void vtkF3DImguiActor::RenderDropZone()
       return;
     }
 
-    const ImVec4 colorImv = F3DStyle::imgui::GetTextColor();
+    const ImVec4 colorImv = ::ColorToImVec4(this->FontColor);
     const ImU32 color =
       IM_COL32(colorImv.x * 255, colorImv.y * 255, colorImv.z * 255, colorImv.w * 255);
 
@@ -469,7 +720,7 @@ void vtkF3DImguiActor::RenderDropZone()
       ImVec2 textPos(viewport->GetWorkCenter().x - textSize.x * ::DROPZONE_MARGIN,
         viewport->GetWorkCenter().y - ::DROPZONE_MARGIN * textSize.y + ::LOGO_DISPLAY_HEIGHT / 2 +
           ::DROPZONE_LOGO_TEXT_PADDING);
-      drawList->AddText(textPos, ImColor(F3DStyle::imgui::GetTextColor()), this->DropText.c_str());
+      drawList->AddText(textPos, ImColor(::ColorToImVec4(this->FontColor)), this->DropText.c_str());
       return;
     }
 
@@ -504,9 +755,9 @@ void vtkF3DImguiActor::RenderDropZone()
       maxBindingsTextWidth = std::max(maxBindingsTextWidth, totalBindingsWidth);
     }
 
-    const ImColor descTextColor = F3DStyle::imgui::GetTextColor();
+    const ImColor descTextColor = ::ColorToImVec4(this->FontColor);
     const ImColor bindingRectColor = F3DStyle::imgui::GetMidColor();
-    const ImColor bindingTextColor = F3DStyle::imgui::GetTextColor();
+    const ImColor bindingTextColor = ::ColorToImVec4(this->FontColor);
 
     float tableWidth =
       maxDescTextWidth + maxBindingsTextWidth + ::DROPZONE_LOGO_TEXT_PADDING + spacingX;
@@ -669,13 +920,42 @@ void vtkF3DImguiActor::RenderCheatSheet()
   const float plusWidth = ImGui::CalcTextSize("+").x;
   const float spacingX = ImGui::GetStyle().ItemSpacing.x;
 
+  auto caseInsensitiveContains = [](const std::string& haystack, const std::string& needle)
+  {
+    std::string lowerHaystack = haystack;
+    std::string lowerNeedle = needle;
+    std::transform(lowerHaystack.begin(), lowerHaystack.end(), lowerHaystack.begin(), ::tolower);
+    std::transform(lowerNeedle.begin(), lowerNeedle.end(), lowerNeedle.begin(), ::tolower);
+    return lowerHaystack.find(lowerNeedle) != std::string::npos;
+  };
+
+  const std::string filterStr(this->Pimpl->SearchFilter.data());
+  const bool hasFilter = !filterStr.empty();
+  const auto searchMode = this->Pimpl->CurrentSearchMode;
+
+  auto entryMatches = [&](const std::string& bind, const std::string& desc)
+  {
+    if (!hasFilter)
+    {
+      return true;
+    }
+    if (searchMode == Internals::SearchMode::Description)
+    {
+      return caseInsensitiveContains(desc, filterStr);
+    }
+    return caseInsensitiveContains(bind, filterStr);
+  };
+
   float textHeight = 0.f;
-  float winWidth = 0.f;
 
   // Use to create all rect with same size
   float maxBindingTextWidth = 0.f;
   float maxDescTextWidth = 0.f;
   float maxValueTextWidth = 0.f;
+
+  const float searchBarHeight =
+    ImGui::GetTextLineHeightWithSpacing() * 2.f + ImGui::GetStyle().ItemSpacing.y;
+  textHeight += searchBarHeight;
 
   for (const auto& [group, content] : this->CheatSheet)
   {
@@ -704,11 +984,11 @@ void vtkF3DImguiActor::RenderCheatSheet()
       ImVec2 valueLineSize = ImGui::CalcTextSize(cyclingValue.c_str());
       maxValueTextWidth = std::max(maxValueTextWidth, valueLineSize.x);
 
-      winWidth = maxBindingTextWidth + maxDescTextWidth + maxValueTextWidth;
+      this->Pimpl->CheatSheetWidth = maxBindingTextWidth + maxDescTextWidth + maxValueTextWidth;
     }
   }
 
-  winWidth += ImGui::GetStyle().ScrollbarSize + 4.f * padding;
+  this->Pimpl->CheatSheetWidth += ImGui::GetStyle().ScrollbarSize + 4.f * padding;
   textHeight += 2.f * ImGui::GetStyle().WindowPadding.y;
 
   const float winTop = std::max(margin, (viewport->WorkSize.y - textHeight) * 0.5f);
@@ -716,7 +996,8 @@ void vtkF3DImguiActor::RenderCheatSheet()
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padding, padding));
 
   ::SetupNextWindow(ImVec2(margin, winTop),
-    ImVec2(winWidth, std::min(viewport->WorkSize.y - (2 * margin), textHeight)));
+    ImVec2(
+      this->Pimpl->CheatSheetWidth, std::min(viewport->WorkSize.y - (2 * margin), textHeight)));
   ImGui::SetNextWindowBgAlpha(this->BackdropOpacity);
 
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -726,8 +1007,48 @@ void vtkF3DImguiActor::RenderCheatSheet()
 
   ImGui::Begin("CheatSheet", nullptr, flags);
 
+  if (this->Pimpl->SearchFocusRequested)
+  {
+    ImGui::SetKeyboardFocusHere();
+    this->Pimpl->SearchFocusRequested = false;
+  }
+  ImGui::PushStyleColor(ImGuiCol_FrameBg, F3DStyle::imgui::GetMidColor());
+  ImGui::PushItemWidth(-1);
+  ImGui::InputTextWithHint("##SearchFilter", "Search...", this->Pimpl->SearchFilter.data(),
+    this->Pimpl->SearchFilter.size(), ImGuiInputTextFlags_EscapeClearsAll);
+  ImGui::PopItemWidth();
+  ImGui::PopStyleColor();
+
+  if (ImGui::RadioButton(
+        "Description", this->Pimpl->CurrentSearchMode == Internals::SearchMode::Description))
+  {
+    this->Pimpl->CurrentSearchMode = Internals::SearchMode::Description;
+    this->Pimpl->SearchFocusRequested = true;
+  }
+  ImGui::SameLine();
+  if (ImGui::RadioButton(
+        "Keybind", this->Pimpl->CurrentSearchMode == Internals::SearchMode::Keybind))
+  {
+    this->Pimpl->CurrentSearchMode = Internals::SearchMode::Keybind;
+    this->Pimpl->SearchFocusRequested = true;
+  }
+
   for (const auto& [group, list] : this->CheatSheet)
   {
+    bool groupHasMatch = false;
+    for (const auto& [bind, desc, val, type] : list)
+    {
+      if (entryMatches(bind, desc))
+      {
+        groupHasMatch = true;
+        break;
+      }
+    }
+    if (!groupHasMatch)
+    {
+      continue;
+    }
+
     ImGui::SeparatorText(group.c_str());
     ImGui::BeginTable("BindingsTable", 3);
     ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthFixed, maxDescTextWidth);
@@ -735,6 +1056,11 @@ void vtkF3DImguiActor::RenderCheatSheet()
     ImGui::TableSetupColumn("Bindings", ImGuiTableColumnFlags_WidthStretch, maxBindingTextWidth);
     for (const auto& [bind, desc, val, type] : list)
     {
+      if (!entryMatches(bind, desc))
+      {
+        continue;
+      }
+
       ImVec4 bindingTextColor, bindingRectColor, descTextColor, valueTextColor;
 
       if (type == CheatSheetBindingType::TOGGLE && val == "ON")
@@ -746,9 +1072,9 @@ void vtkF3DImguiActor::RenderCheatSheet()
       }
       else
       {
-        bindingTextColor = F3DStyle::imgui::GetTextColor();
+        bindingTextColor = ::ColorToImVec4(this->FontColor);
         bindingRectColor = F3DStyle::imgui::GetMidColor();
-        descTextColor = F3DStyle::imgui::GetTextColor();
+        descTextColor = ::ColorToImVec4(this->FontColor);
         valueTextColor = F3DStyle::imgui::GetHighlightColor();
       }
 
@@ -877,4 +1203,146 @@ void vtkF3DImguiActor::SetDeltaTime(double time)
 {
   ImGuiIO& io = ImGui::GetIO();
   io.DeltaTime = time;
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DImguiActor::RenderNotifications(double currentTime)
+{
+  int index = 0;
+
+  for (const auto& [desc, value, bind, stopTime] : this->Notifications)
+  {
+    std::string description = desc;
+    if (!value.empty())
+    {
+      description += ':';
+    }
+
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+    // Mimic the style format in cheatsheet
+    ImGui::PushFont(Pimpl->ExtraFonts["notiFont"]);
+    constexpr float margin = F3DStyle::GetDefaultMargin();
+    ImVec2 descLineSize = ImGui::CalcTextSize(description.c_str());
+    ImVec2 valueLineSize = ImGui::CalcTextSize(value.c_str());
+    ImVec2 windowPadding = ImGui::GetStyle().WindowPadding;
+    const float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
+    // Increase line spacing a bit
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(itemSpacingX, 10.0f * this->FontScale));
+
+    float windowWidth = descLineSize.x + valueLineSize.x + windowPadding.x * 2.f;
+    windowWidth += value.empty() ? 0.f : itemSpacingX;
+
+    auto keys = ::SplitBindings(bind, '+');
+
+    if (this->BindingsVisible && !bind.empty())
+    {
+      windowWidth +=
+        std::accumulate(keys.begin(), keys.end(), 0.0f, [&](float sum, const std::string& key)
+          { return sum + this->CalcBadgeWidth(key) + itemSpacingX; });
+    }
+
+    float windowHeight = descLineSize.y + windowPadding.y * 2.f;
+
+    ImVec4 descTextColor = ::ColorToImVec4(this->FontColor);
+    ImVec4 valueTextColor = F3DStyle::imgui::GetHighlightColor(); // Blue
+
+    // change color for booleans
+    if (value == "ON")
+    {
+      valueTextColor = F3DStyle::imgui::GetCompletionColor(); // Green
+    }
+    else if (value == "OFF")
+    {
+      valueTextColor = F3DStyle::imgui::GetErrorColor(); // Red
+    }
+
+    constexpr double fadingTime = 0.5;
+    float alpha = std::clamp((stopTime - currentTime) / fadingTime, 0.0, 1.0);
+
+    descTextColor.w = alpha;
+    valueTextColor.w = alpha;
+    ImGui::SetNextWindowBgAlpha(alpha * this->BackdropOpacity);
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+      ImGuiWindowFlags_NoNav;
+
+    float yOffset = index * (windowHeight + margin);
+
+    ImVec2 position(margin, viewport->WorkSize.y - windowHeight - margin - yOffset);
+    ::SetupNextWindow(position, ImVec2(windowWidth, windowHeight));
+
+    // Render each notification in separated window
+    ImGui::Begin(("##notif_" + std::to_string(index)).c_str(), nullptr, flags);
+
+    if (this->BindingsVisible && !bind.empty())
+    {
+      for (const std::string& key : keys)
+      {
+        this->RenderBadge(key, alpha);
+        ImGui::SameLine();
+      }
+    }
+
+    ImGui::TextColored(descTextColor, "%s", description.c_str());
+    if (!value.empty())
+    {
+      ImGui::SameLine();
+      ImGui::TextColored(valueTextColor, "%s", value.c_str());
+    }
+
+    ImGui::End();
+    ImGui::PopStyleVar();
+    ImGui::PopFont();
+
+    ++index;
+  }
+}
+
+//----------------------------------------------------------------------------
+float vtkF3DImguiActor::CalcBadgeWidth(const std::string& text)
+{
+  ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+  const float paddingX = F3DStyle::GetDefaultMargin() * this->FontScale;
+  return textSize.x + paddingX * 2.f;
+}
+
+//----------------------------------------------------------------------------
+void vtkF3DImguiActor::RenderBadge(const std::string& text, float alpha)
+{
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+  ImVec2 pos = ImGui::GetCursorScreenPos();
+  ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+
+  const float paddingX = F3DStyle::GetDefaultMargin() * this->FontScale;
+  const float paddingY = F3DStyle::GetDefaultMargin() * this->FontScale * 0.5f;
+
+  ImVec2 badgeSize = ImVec2(textSize.x + paddingX * 2.f, textSize.y + paddingY * 2.f);
+
+  // Align badge vertically
+  pos.y += (ImGui::GetTextLineHeight() - badgeSize.y) * 0.5f;
+
+  ImVec2 rectMin = pos;
+  ImVec2 rectMax = ImVec2(pos.x + badgeSize.x, pos.y + badgeSize.y);
+
+  float rounding = 4.f * this->FontScale;
+
+  ImVec4 bindingTextColor = ::ColorToImVec4(this->FontColor);
+  ImVec4 bindingRectColor = F3DStyle::imgui::GetMidColor();
+  bindingTextColor.w = alpha;
+  bindingRectColor.w = alpha;
+
+  // Background
+  drawList->AddRectFilled(
+    rectMin, rectMax, ImGui::ColorConvertFloat4ToU32(bindingRectColor), rounding);
+
+  // Text
+  ImVec2 textPos = ImVec2(pos.x + paddingX, pos.y + paddingY);
+
+  drawList->AddText(textPos, ImGui::ColorConvertFloat4ToU32(bindingTextColor), text.c_str());
+
+  // Advance layout cursor
+  ImGui::Dummy(badgeSize);
 }

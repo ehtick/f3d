@@ -155,13 +155,28 @@ EMSCRIPTEN_BINDINGS(f3d)
         }
       },
       emscripten::return_value_policy::reference())
+    .function(
+      "addBuffer",
+      +[](f3d::scene& scene, emscripten::val jsbuf) -> f3d::scene&
+      {
+        std::vector<unsigned char> data = emscripten::vecFromJSArray<unsigned char>(jsbuf);
+        return scene.add(reinterpret_cast<std::byte*>(data.data()), data.size());
+      },
+      emscripten::return_value_policy::reference())
     .function("clear", &f3d::scene::clear, emscripten::return_value_policy::reference())
     .function("loadAnimationTime", &f3d::scene::loadAnimationTime,
       emscripten::return_value_policy::reference())
     .function(
-      "animationTimeRange",
-      +[](f3d::scene& o) -> emscripten::val { return pairToJSArray(o.animationTimeRange()); })
-    .function("availableAnimations", &f3d::scene::availableAnimations);
+      "animationTimeRange", +[](f3d::scene& scene) -> emscripten::val
+      { return pairToJSArray(scene.animationTimeRange()); })
+    .function(
+      "getAnimationKeyFrames", +[](f3d::scene& scene) -> emscripten::val
+      { return containerToJSArray(scene.getAnimationKeyFrames()); })
+    .function("availableAnimations", &f3d::scene::availableAnimations)
+    .function("getAnimationName", &f3d::scene::getAnimationName)
+    .function(
+      "getAnimationNames",
+      +[](f3d::scene& scene) { return containerToJSArray(scene.getAnimationNames()); });
 
   // f3d::image
   emscripten::enum_<f3d::image::SaveFormat>("ImageSaveFormat")
@@ -367,7 +382,11 @@ EMSCRIPTEN_BINDINGS(f3d)
     .function("requestRender", &f3d::interactor::requestRender,
       emscripten::return_value_policy::reference())
     .function(
-      "requestStop", &f3d::interactor::requestStop, emscripten::return_value_policy::reference());
+      "requestStop", &f3d::interactor::requestStop, emscripten::return_value_policy::reference())
+    .function(
+      "triggerNotification",
+      +[](f3d::interactor& interactor, std::string desc, std::string value, double duration)
+      { interactor.triggerNotification(desc, value, duration); });
 
   // f3d::engine
   // Not bound on purpose because only one engine is supported:

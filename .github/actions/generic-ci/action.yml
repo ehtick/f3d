@@ -41,8 +41,17 @@ inputs:
   blosc_version:
     description: "Version of blosc to build"
     required: true
+  curl_version:
+    description: "Version of gdal to build"
+    required: false
   draco_version:
     description: "Version of draco to build"
+    required: false
+  gdal_version:
+    description: "Version of gdal to build"
+    required: false
+  geotiff_version:
+    description: "Version of geotiff to build"
     required: false
   imath_version:
     description: "Version of imath to build"
@@ -62,11 +71,23 @@ inputs:
   ospray_version:
     description: "Version of ospray to build"
     required: false
+  pdal_version:
+    description: "Version of pdal to build"
+    required: false
+  proj_version:
+    description: "Version of proj to build"
+    required: false
   pybind11_version:
     description: "Version of pybind11 to build"
     required: false
   python_version:
     description: "Version of python to install"
+    required: false
+  sqlite_csb_version:
+    description: "Version of csb providing sqlite to build against"
+    required: false
+  tiff_version:
+    description: "Version of tiff to build"
     required: false
   tbb_version:
     description: "Version of tbb to build"
@@ -79,6 +100,9 @@ inputs:
     required: true
   webp_version:
     description: "Version of webp to build"
+    required: true
+  webifc_version:
+    description: "Version of webifc to build"
     required: true
   zlib_version:
     description: "Version of zlib to build"
@@ -110,15 +134,23 @@ runs:
         alembic_version: ${{inputs.alembic_version}}
         assimp_version: ${{inputs.assimp_version}}
         blosc_version: ${{inputs.blosc_version}}
+        curl_version: ${{inputs.curl_version}}
         draco_version: ${{inputs.draco_version}}
+        gdal_version: ${{inputs.gdal_version}}
+        geotiff_version: ${{inputs.geotiff_version}}
         imath_version: ${{inputs.imath_version}}
         occt_version: ${{inputs.occt_version}}
         openexr_version: ${{inputs.openexr_version}}
         openvdb_version: ${{inputs.openvdb_version}}
         ospray_version: ${{inputs.ospray_version}}
+        pdal_version: ${{inputs.pdal_version}}
+        proj_version: ${{inputs.proj_version}}
         pybind11_version: ${{inputs.pybind11_version}}
+        sqlite_csb_version: ${{inputs.sqlite_csb_version}}
         tbb_version: ${{inputs.tbb_version}}
+        tiff_version: ${{inputs.tiff_version}}
         usd_version: ${{inputs.usd_version}}
+        webifc_version: ${{inputs.webifc_version}}
         webp_version: ${{inputs.webp_version}}
         zlib_version: ${{inputs.zlib_version}}
         global_cache_index: ${{inputs.global_cache_index}}
@@ -128,9 +160,16 @@ runs:
       with:
         cpu: ${{inputs.cpu}}
         blosc_version: ${{inputs.blosc_version}}
+        curl_version: ${{inputs.curl_version}}
+        gdal_version: ${{inputs.gdal_version}}
+        geotiff_version: ${{inputs.geotiff_version}}
         openvdb_version: ${{inputs.openvdb_version}}
         ospray_version: ${{inputs.ospray_version}}
+        pdal_version: ${{inputs.pdal_version}}
+        proj_version: ${{inputs.proj_version}}
+        sqlite_csb_version: ${{inputs.sqlite_csb_version}}
         tbb_version: ${{inputs.tbb_version}}
+        tiff_version: ${{inputs.tiff_version}}
         vtk_version: ${{inputs.vtk_version}}
         zlib_version: ${{inputs.zlib_version}}
         global_cache_index: ${{inputs.global_cache_index}}
@@ -139,7 +178,7 @@ runs:
       if: |
         inputs.optional_deps_label == 'optional-deps' &&
         inputs.python_version != ''
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{inputs.python_version}}
 
@@ -157,7 +196,7 @@ runs:
       if: |
         inputs.optional_deps_label == 'optional-deps' &&
         inputs.java_version != ''
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: "temurin"
         java-version: ${{inputs.java_version}}
@@ -234,7 +273,9 @@ runs:
         -DF3D_PLUGIN_BUILD_ASSIMP=${{ inputs.optional_deps_label == 'optional-deps' && 'ON' || 'OFF' }}
         -DF3D_PLUGIN_BUILD_DRACO=${{ inputs.optional_deps_label == 'optional-deps' && 'ON' || 'OFF' }}
         -DF3D_PLUGIN_BUILD_HDF=${{ inputs.optional_deps_label == 'optional-deps' && 'ON' || 'OFF' }}
+        -DF3D_PLUGIN_BUILD_WEBIFC=${{ inputs.optional_deps_label == 'optional-deps' && 'ON' || 'OFF' }}
         -DF3D_PLUGIN_BUILD_OCCT=${{ inputs.optional_deps_label == 'optional-deps' && inputs.static_label == 'no-static' && 'ON' || 'OFF' }}
+        -DF3D_PLUGIN_BUILD_PDAL=${{ inputs.optional_deps_label == 'optional-deps' && inputs.vtk_version != 'v9.3.0' && 'ON' || 'OFF' }}
         -DF3D_PLUGIN_BUILD_USD=${{ inputs.optional_deps_label == 'optional-deps' && 'ON' || 'OFF' }}
         -DF3D_PLUGIN_BUILD_VDB=${{ (runner.os != 'Windows' || matrix.vtk_version != 'v9.3.0') && inputs.optional_deps_label == 'optional-deps' && 'ON' || 'OFF' }}
         -DF3D_PLUGIN_OCCT_COLORING_SUPPORT=${{ inputs.occt_version != 'V7_6_3' && 'ON' || 'OFF' }}
@@ -249,7 +290,7 @@ runs:
         -DF3D_TESTING_FORCE_RENDERING_BACKEND=${{ inputs.rendering_backend }}
         -DF3D_WINDOWS_BUILD_CONSOLE_APPLICATION=ON
         ${{ runner.os == 'Windows' && '-Ax64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL' || null }}
-        ${{ runner.os == 'macOS' && '-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0' || null }}
+        ${{ runner.os == 'macOS' && '-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0' || null }}
 
     - name: Build
       shell: bash
@@ -291,7 +332,7 @@ runs:
         runner.os == 'macOS' &&
         inputs.cpu == 'x86_64'
       shell: bash
-      run: echo "F3D_CTEST_EXCEPTIONS=(TestDXF)|(TestScalarsCell)|(TestXCAFColors)|(TestInteractionAnimationSlow)|(TestInteractionFocalPointPickingPoints)|(TestInteractionCycleAnimation)|(TestInteractionCycleComp)|(TestGLTFRigArmature)|(TestInteractionNoModelScrollWheel)|(TestInteractionNoModelScrollBar)" >> $GITHUB_ENV
+      run: echo "F3D_CTEST_EXCEPTIONS=(TestDXF)|(TestPipedDXF)|(TestScalarsCell)|(TestXCAFColors)|(TestInteractionAnimationSlow)|(TestInteractionFocalPointPickingPoints)|(TestInteractionCycleAnimation)|(TestInteractionCycleComp)|(TestGLTFRigArmature)|(TestInteractionNoModelScrollWheel)|(TestInteractionNoModelScrollBar)" >> $GITHUB_ENV
 
     # Certain tests are failing on macOS arm64 for unknown reasons
     # https://github.com/f3d-app/f3d/issues/1276
@@ -302,7 +343,7 @@ runs:
         runner.os == 'macOS' &&
         inputs.cpu == 'arm64'
       shell: bash
-      run: echo "F3D_CTEST_EXCEPTIONS=(TestDepthPeelingToneMapping)|(TestDepthPeeling)|(TestTextureColor)|(TestDXF)|(TestScalarsCell)|(TestXCAFColors)|(TestGrid)|(TestConfig)|(TestGLTFDracoImporter)|(TestInteractionActors)|(TestInteractionFocalPointPickingPoints)|(TestInteractionCycleAnimation)|(TestInteractionAnimationSlow)|(TestInteractionConfigFileInteractions)|(TestGLTFRigArmature)|(TestInteractionRollCameraRotation)|(TestInteractionDragRotateVertical)|(TestInteractionCheatsheetConfigFile)|(TestInteractionCheatsheetWhiteBG)|(TestInteractionCheatsheetBlackBG)|(TestInteractionCheatsheetNoFile)|(TestInteractionCheatsheetOpacity)|(TestInteractionCheatsheetAnimationName)|(TestInteractionCheatsheetSSAA)|(TestMaxSizeAboveMultiFile)|(TestAxesCustomColor)" >> $GITHUB_ENV
+      run: echo "F3D_CTEST_EXCEPTIONS=(TestDepthPeelingToneMapping)|(TestDepthPeeling)|(TestTextureColor)|(TestDXF)|(TestPipedDXF)|(TestScalarsCell)|(TestXCAFColors)|(TestGrid)|(TestConfig)|(TestGLTFDracoImporter)|(TestInteractionActors)|(TestInteractionFocalPointPickingPoints)|(TestInteractionCycleAnimation)|(TestInteractionAnimationSlow)|(TestInteractionConfigFileInteractions)|(TestGLTFRigArmature)|(TestInteractionRollCameraRotation)|(TestInteractionDragRotateVertical)|(TestInteractionCheatsheet)|(TestMaxSizeAboveMultiFile)|(TestAxesCustomColor)|(TestInteractionTAA)|(TestInteractionTAAMiddleClick)|(TestInteractionStochasticTAA)|(TestInteractionPointCloudTAA)|(TestSDKNotification)" >> $GITHUB_ENV
 
     - name: Test
       shell: bash
@@ -311,7 +352,7 @@ runs:
 
     - name: Upload Tests Artifact
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         path: ./build/Testing/Temporary
         name: f3d-tests-artifact-${{runner.os}}-${{inputs.vtk_version}}-${{inputs.build_type}}-${{inputs.cpu}}-${{inputs.bundle_label}}-${{inputs.static_label}}
@@ -334,6 +375,12 @@ runs:
         cmake --install . --component sdk
         cmake --install . --component configuration
         cmake --install . --component colormaps
+
+    - name: Install Mesa Windows in install
+      if: runner.os == 'Windows'
+      uses: f3d-app/install-mesa-windows-action@v2
+      with:
+        path: ${{github.workspace}}\install\bin
 
     - name: Build and configure python externally
       if: |
@@ -428,12 +475,6 @@ runs:
       shell: bash
       run: echo "F3D_BIN_PATH=./bin/f3d" >> $GITHUB_ENV
 
-    - name: Install Mesa Windows in install
-      if: runner.os == 'Windows'
-      uses: f3d-app/install-mesa-windows-action@v2
-      with:
-        path: ${{github.workspace}}\install\bin
-
     # Grid rendering has artifacts in macOS arm64 CI
     # https://github.com/f3d-app/f3d/issues/1276
     - name: Check F3D_PLUGINS_PATH using plugin example
@@ -474,7 +515,7 @@ runs:
 
     - name: Check Install Windows Console Executable
       if: |
-        inputs.vtk_version != 'v9.3.0' && inputs.vtk_version != 'v9.4.2' && inputs.vtk_version != 'v9.5.2' 
+        inputs.vtk_version != 'v9.3.0' && inputs.vtk_version != 'v9.4.2' && inputs.vtk_version != 'v9.5.2'
         && runner.os == 'Windows'
       shell: bash
       working-directory: ${{github.workspace}}/install
@@ -483,7 +524,7 @@ runs:
 
     - name: Upload Tests Install Artifact
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         path: ./install/output
         name: f3d-tests-install-artifact-${{runner.os}}-${{inputs.vtk_version}}-${{inputs.build_type}}-${{inputs.cpu}}-${{inputs.bundle_label}}-${{inputs.static_label}}

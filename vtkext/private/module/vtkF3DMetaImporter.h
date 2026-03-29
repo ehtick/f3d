@@ -11,18 +11,13 @@
 
 #include <vtkActor.h>
 #include <vtkBoundingBox.h>
+#include <vtkGlyph3DMapper.h>
 #include <vtkPointGaussianMapper.h>
 #include <vtkProperty.h>
 #include <vtkSmartVolumeMapper.h>
-#include <vtkVersion.h>
 #include <vtkVolume.h>
 
-#if VTK_VERSION_NUMBER < VTK_VERSION_CHECK(9, 3, 20240707)
-#include <vtkActorCollection.h>
-#endif
-
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -38,13 +33,15 @@ public:
    */
   struct VolumeStruct
   {
-    VolumeStruct()
+    explicit VolumeStruct(vtkActor* originalActor)
+      : OriginalActor(originalActor)
     {
       this->Mapper->SetRequestedRenderModeToGPU();
       this->Prop->SetMapper(this->Mapper);
     }
     vtkNew<vtkVolume> Prop;
     vtkNew<vtkSmartVolumeMapper> Mapper;
+    vtkActor* OriginalActor;
   };
 
   struct PointSpritesStruct
@@ -61,6 +58,23 @@ public:
     vtkNew<vtkPointGaussianMapper> Mapper;
     vtkActor* OriginalActor;
     vtkImporter* Importer;
+  };
+
+  struct NormalGlyphsStruct
+  {
+    explicit NormalGlyphsStruct(vtkActor* originalActor, vtkImporter* importer)
+      : OriginalActor(originalActor)
+      , Importer(importer)
+    {
+      this->Actor->vtkProp3D::ShallowCopy(originalActor);
+      this->Actor->SetMapper(this->GlyphMapper);
+    }
+
+    vtkNew<vtkActor> Actor;
+    vtkActor* OriginalActor;
+    vtkImporter* Importer;
+    vtkNew<vtkGlyph3DMapper> GlyphMapper;
+    bool InputDataHasNormals = false;
   };
 
   struct ColoringStruct
@@ -81,6 +95,14 @@ public:
     vtkNew<vtkPolyDataMapper> Mapper;
     vtkActor* OriginalActor;
   };
+
+  struct ImporterInfo
+  {
+    std::string Name;
+    vtkSmartPointer<vtkImporter> Importer;
+    bool Updated = false;
+    vtkSmartPointer<vtkDataAssembly> DataAssembly;
+  };
   ///@}
 
   /**
@@ -89,9 +111,10 @@ public:
   void Clear();
 
   /**
-   * Add an importer to update when importer all actors
+   * Add an importer to update when importing all actors
+   * The first element is a descriptor and the second element is the internal importer to add
    */
-  void AddImporter(const vtkSmartPointer<vtkImporter>& importer);
+  void AddImporter(const std::pair<std::string, vtkSmartPointer<vtkImporter>>& importer);
 
   /**
    * Get the bounding box of all geometry actors
@@ -111,6 +134,7 @@ public:
    * API to recover information about all imported actors, point sprites and volume if any
    */
   const std::vector<ColoringStruct>& GetColoringActorsAndMappers();
+  const std::vector<NormalGlyphsStruct>& GetNormalGlyphsActorsAndMappers();
   const std::vector<PointSpritesStruct>& GetPointSpritesActorsAndMappers();
   const std::vector<VolumeStruct>& GetVolumePropsAndMappers();
   ///@}
@@ -129,6 +153,21 @@ public:
    * Concatenate individual importers output description into one and return it
    */
   std::string GetOutputsDescription() override;
+
+  /**
+   * Information key used to propagate the array name used as texture coordinates
+   */
+  static vtkInformationIntegerKey* ACTOR_HIDDEN();
+
+  /**
+   * Get the number of importers
+   */
+  int GetImporterInfoCount();
+
+  /**
+   * Return info about a specific importer
+   */
+  ImporterInfo GetImporterInfo(int index);
 
   ///@{
   /**
@@ -187,10 +226,6 @@ private:
 
   struct Internals;
   std::unique_ptr<Internals> Pimpl;
-
-#if VTK_VERSION_NUMBER < VTK_VERSION_CHECK(9, 3, 20240707)
-  vtkNew<vtkActorCollection> ActorCollection;
-#endif
 };
 
 #endif
