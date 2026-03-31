@@ -390,10 +390,11 @@ bool vtkF3DMetaImporter::Update()
       vtkPolyData* surface = pdMapper->GetInput();
 
       // convert to PBR materials if needed
-      if (!genericImporter && actor->GetProperty()->GetInterpolation() != VTK_PBR)
+      // this should be moved elsewhere, see https://github.com/f3d-app/f3d/issues/2995
+      if (!genericImporter && actor->GetProperty()->GetInterpolation() != VTK_PBR &&
+        actor->GetProperty()->GetLighting())
       {
         actor->GetProperty()->SetInterpolationToPBR();
-        actor->GetProperty()->LightingOn();
 
         // Convert to linear space
         auto toLinear = [](double c) { return std::pow(c, 2.2); };

@@ -45,6 +45,12 @@ f3d_test(NAME TestEdges DATA suzanne.ply ARGS -e)
 f3d_test(NAME TestLineWidth DATA cow.vtk ARGS -e --line-width=5)
 f3d_test(NAME TestLineWidthFullScene DATA suzanne.obj ARGS -e --line-width=3 --up=-Y)
 
+# https://gitlab.kitware.com/vtk/vtk/-/merge_requests/12702
+if(VTK_VERSION VERSION_GREATER_EQUAL 9.5.20251214)
+  f3d_test(NAME TestUnlitTexture DATA WaterBottle.glb ARGS --unlit)
+endif()
+f3d_test(NAME TestUnlit DATA cow.vtp ARGS --unlit --color=0.9,0.1,0.1)
+
 # Scalar coloring
 f3d_test(NAME TestScalars DATA suzanne.ply ARGS -s --coloring-array=Normals --coloring-component=1)
 f3d_test(NAME TestScalarsCell DATA f3d.vtp ARGS --scalar-coloring --coloring-by-cells --coloring-component=-2 --up=+Z)
