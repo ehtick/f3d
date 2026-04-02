@@ -45,6 +45,12 @@ f3d_test(NAME TestEdges DATA suzanne.ply ARGS -e)
 f3d_test(NAME TestLineWidth DATA cow.vtk ARGS -e --line-width=5)
 f3d_test(NAME TestLineWidthFullScene DATA suzanne.obj ARGS -e --line-width=3 --up=-Y)
 
+# https://gitlab.kitware.com/vtk/vtk/-/merge_requests/12702
+if(VTK_VERSION VERSION_GREATER_EQUAL 9.5.20251214)
+  f3d_test(NAME TestUnlitTexture DATA WaterBottle.glb ARGS --unlit)
+endif()
+f3d_test(NAME TestUnlit DATA cow.vtp ARGS --unlit --color=0.9,0.1,0.1)
+
 # Scalar coloring
 f3d_test(NAME TestScalars DATA suzanne.ply ARGS -s --coloring-array=Normals --coloring-component=1)
 f3d_test(NAME TestScalarsCell DATA f3d.vtp ARGS --scalar-coloring --coloring-by-cells --coloring-component=-2 --up=+Z)
@@ -64,6 +70,7 @@ f3d_test(NAME TestAnimationInputChangeColoring DATA v_rock2.mdl ARGS --scalar-co
 f3d_test(NAME TestDisplayDepth DATA dragon.vtu ARGS --display-depth)
 f3d_test(NAME TestDisplayDepthColorMap DATA dragon.vtu ARGS --display-depth --scalar-coloring=True)
 f3d_test(NAME TestDisplayDepthCustomColorMap DATA dragon.vtu ARGS --display-depth --scalar-coloring --colormap=0,red,1,blue)
+f3d_test(NAME TestDisplayDepthWithGrid DATA cow.vtp ARGS --display-depth -g)
 
 # DPI scaling
 f3d_test(NAME TestDPI125 DATA dragon.vtu ARGS -nm --dpi-aware DPI_SCALE 1.25 UI)
@@ -607,7 +614,7 @@ f3d_test(NAME TestVerboseOptionsConfig ARGS --verbose=debug CONFIG ${F3D_SOURCE_
 f3d_test(NAME TestQuietNonExistentFile DATA nonExistentFile.vtp ARGS --verbose=quiet --no-render REGEXP_FAIL "File .*nonExistentFile.vtp does not exist")
 
 # Test non supported file, do not add support for .dummy file.
-f3d_test(NAME TestUnsupportedFileText DATA unsupportedFile.dummy ARGS --filename REGEXP ".*unsupportedFile.dummy is not a file of a supported file format" NO_RENDER)
+f3d_test(NAME TestUnsupportedFileText DATA unsupportedFile.dummy ARGS --filename REGEXP ".*unsupportedFile.dummy is of an unknown format" NO_RENDER)
 
 # Test non existent texture, do not add a dummy.png
 f3d_test(NAME TestNonExistentTexture DATA cow.vtp ARGS --texture-material=${F3D_SOURCE_DIR}/testing/data/dummy.png REGEXP "Texture file does not exist" NO_BASELINE)
