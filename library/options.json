@@ -422,6 +422,10 @@
       "enable": {
         "type": "bool",
         "default_value": "false"
+      },
+      "scale": {
+        "type": "ratio",
+        "default_value": "1.0"
       }
     },
     "volume": {

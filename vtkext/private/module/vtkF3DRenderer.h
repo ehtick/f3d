@@ -351,6 +351,11 @@ public:
   void SetUseNormalGlyphs(bool use);
 
   /**
+   * Sets the GlyphScaleMultiplier
+   */
+  void SetNormalGlyphScaleMultiplier(double multiplier);
+
+  /**
    * Set the visibility of the point sprites actor.
    * It will only be shown if raytracing and volume are not enabled
    */
@@ -841,6 +846,7 @@ private:
 
   bool ScalarBarVisible = false;
   bool UseNormalGlyphs = false;
+  double NormalGlyphScaleMultiplier = 1.0;
   bool UsePointSprites = false;
   bool UseVolume = false;
   bool UseInverseOpacityFunction = false;

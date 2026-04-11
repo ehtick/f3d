@@ -1726,6 +1726,11 @@ void vtkF3DRenderer::SetBlurCircleOfConfusionRadius(double radius)
     this->RenderPassesConfigured = false;
   }
 }
+//----------------------------------------------------------------------------
+void vtkF3DRenderer::SetNormalGlyphScaleMultiplier(double multiplier)
+{
+  this->NormalGlyphScaleMultiplier = multiplier;
+}
 
 //----------------------------------------------------------------------------
 void vtkF3DRenderer::SetUseSSAOPass(bool use)
@@ -2918,8 +2923,7 @@ void vtkF3DRenderer::ConfigureNormalGlyphs()
 //----------------------------------------------------------------------------
 void vtkF3DRenderer::UpdateNormalGlyphsScale()
 {
-  constexpr double normalGlyphScaleMultiplier = 0.15;
-
+  const double normalGlyphScaleMultiplier = 0.15 * this->NormalGlyphScaleMultiplier;
   const auto getScale = [](vtkCamera* camera)
   {
     if (camera->GetParallelProjection())
