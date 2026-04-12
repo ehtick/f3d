@@ -461,19 +461,19 @@ Show _axes_ as a trihedron in the scene. Requires an interactor.
 
 CLI: `--axis`.
 
-### `ui.x_color` (_color_, default: `#f94306`)
+### `ui.x_color` (_color_, default: `f3d_red`)
 
 Set the X axis color in both widget and grid.
 
 CLI: `--x-color`.
 
-### `ui.y_color` (_color_, default: `#7aff7a`)
+### `ui.y_color` (_color_, default: `f3d_green`)
 
 Set the Y axis color in both widget and grid.
 
 CLI: `--y-color`.
 
-### `ui.z_color` (_color_, default: `#788bff`)
+### `ui.z_color` (_color_, default: `f3d_blue`)
 
 Set the Z axis color in both widget and grid.
 
@@ -524,7 +524,7 @@ Scale fonts. Useful for HiDPI displays.
 
 CLI: `--font-scale`.
 
-### `ui.font_color` (_color_, default: `0.957,0.957,0.957`)
+### `ui.font_color` (_color_, default: `f3d_white`)
 
 Set font color.
 
@@ -549,9 +549,9 @@ Show a _progress bar_ when loading the file.
 
 CLI: `--loading-progress`.
 
-### `ui.loader_progress_color` (_color_, optional, **on load**)
+### `ui.loader_progress_color` (_color_, default: `f3d_yellow`)
 
-Set loader progress bar color or use default one #FFFFFF if not set.
+Set loader progress bar color.
 
 ### `ui.animation_progress` (_bool_, default: `false`, **on load**)
 
@@ -559,9 +559,9 @@ Show a _progress bar_ when playing the animation.
 
 CLI: `--animation-progress`.
 
-### `ui.animation_progress_color` (_color_, optional, **on load**)
+### `ui.animation_progress_color` (_color_, default: `f3d_blue`)
 
-Set animation progress bar color or use default one #788BFF if not set.
+Set animation progress bar color.
 
 ### `ui.metadata` (_bool_, default: `false`)
 

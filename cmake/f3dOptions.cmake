@@ -104,8 +104,15 @@ function(_parse_json_option _top_json)
     if(_option_type_error STREQUAL "NOTFOUND" AND ${_option_type_type} STREQUAL "STRING")
        # Leaf option found!
 
-       # Recover default_value if any
+       # Recover default_value or parsed_default_value if any
        string(JSON _option_default_value ERROR_VARIABLE _default_value_error GET ${_cur_json} "default_value")
+       set(_is_parsable_type FALSE)
+       if (NOT _default_value_error STREQUAL "NOTFOUND")
+         string(JSON _option_default_value ERROR_VARIABLE _default_value_error GET ${_cur_json} "parsed_default_value")
+         if (_default_value_error STREQUAL "NOTFOUND")
+           set(_is_parsable_type TRUE)
+         endif()
+       endif()
 
        # Recover deprecated if any
        string(JSON _option_deprecated ERROR_VARIABLE _deprecated_error GET ${_cur_json} "deprecated")
@@ -125,7 +132,7 @@ function(_parse_json_option _top_json)
          set(_option_variant_type "std::vector<int>")
          set(_option_default_value_start "{")
          set(_option_default_value_end "}")
-      elseif(_option_type STREQUAL "double_vector")
+       elseif(_option_type STREQUAL "double_vector")
          set(_option_actual_type "std::vector<double>")
          set(_option_variant_type "std::vector<double>")
          set(_option_default_value_start "{")
@@ -182,7 +189,11 @@ function(_parse_json_option _top_json)
 
        if(_default_value_error STREQUAL "NOTFOUND")
          # Use default_value
-         set(_optional_default_value_initialize "${_option_explicit_constr}${_option_default_value_start}${_option_default_value}${_option_default_value_end}")
+         if (_is_parsable_type)
+           set(_optional_default_value_initialize "options::parse<${_option_actual_type}>(\"${_option_default_value}\")")
+         else()
+           set(_optional_default_value_initialize "${_option_explicit_constr}${_option_default_value_start}${_option_default_value}${_option_default_value_end}")
+         endif()
          string(APPEND _options_struct "${_option_indent}  ${_option_deprecated_string}${_option_actual_type} ${_member_name} = ${_optional_default_value_initialize};\n")
          set(_optional_getter "")
          list(APPEND _options_is_optional "if (name == \"${_option_name}\") return false")
