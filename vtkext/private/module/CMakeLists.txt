@@ -85,6 +85,7 @@ set(classes
   vtkF3DObjectFactory
   vtkF3DOpenGLGridMapper
   vtkF3DOverlayRenderPass
+  vtkF3DPointSplatMapper
   vtkF3DPolyDataMapper
   vtkF3DPostProcessFilter
   vtkF3DRenderPass
@@ -101,11 +102,6 @@ set(classes
 if (F3D_MODULE_UI)
   set(classes ${classes} vtkF3DImguiActor vtkF3DImguiConsole vtkF3DImguiObserver F3DStyle)
 endif ()
-
-# Needs https://gitlab.kitware.com/vtk/vtk/-/merge_requests/10675
-if(VTK_VERSION VERSION_GREATER_EQUAL 9.3.20240203)
-  set(classes ${classes} vtkF3DPointSplatMapper)
-endif()
 
 if(WIN32)
   list(APPEND classes vtkF3DWGLRenderWindow)
