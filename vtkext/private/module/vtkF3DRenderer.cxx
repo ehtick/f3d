@@ -99,6 +99,7 @@
 
 #include <cctype>
 #include <chrono>
+#include <numbers>
 #include <sstream>
 
 namespace
@@ -364,8 +365,8 @@ void vtkF3DRenderer::ApplyUpDirection(const std::array<double, 3>& up)
   vtkMath::Cross(up.data(), front.data(), orthRight.data());
   vtkMath::Normalize(orthRight.data());
 
-  std::copy(up.begin(), up.end(), this->UpDirection);
-  std::copy(orthRight.begin(), orthRight.end(), this->RightDirection);
+  std::ranges::copy(up, this->UpDirection);
+  std::ranges::copy(orthRight, this->RightDirection);
 
   this->SkyboxActor->SetFloorPlane(up[0], up[1], up[2], 0.0);
   this->SkyboxActor->SetFloorRight(front[0], front[1], front[2]);
@@ -415,7 +416,7 @@ void vtkF3DRenderer::SetPendingUpDirection(const std::vector<double>& upVec)
     return;
   }
 
-  std::copy(up.begin(), up.end(), this->PendingUpDirection);
+  std::ranges::copy(up, this->PendingUpDirection);
   this->UpDirectionConfigured = false;
 }
 
@@ -431,7 +432,7 @@ void vtkF3DRenderer::ConfigureUpDirection()
   vtkMath::Cross(oldUp.data(), newUp.data(), axis.data());
   double sinAngle = vtkMath::Normalize(axis.data());
   double cosAngle = vtkMath::Dot(oldUp.data(), newUp.data());
-  double angle = std::atan2(sinAngle, cosAngle) * 180.0 / vtkMath::Pi();
+  double angle = std::atan2(sinAngle, cosAngle) * 180.0 / std::numbers::pi;
 
   vtkCamera* cam = this->GetActiveCamera();
   double foc[3];
@@ -593,10 +594,10 @@ std::string vtkF3DRenderer::GetSceneDescription()
   double bounds[6];
   this->ComputeVisiblePropBounds(bounds);
 
-  stream << "Scene bounding box: "                                  //
-         << bounds[0] << u8" \u2264 x \u2264 " << bounds[1] << ", " //
-         << bounds[2] << u8" \u2264 y \u2264 " << bounds[3] << ", " //
-         << bounds[4] << u8" \u2264 z \u2264 " << bounds[5] << "\n\n";
+  stream << "Scene bounding box: "                                //
+         << bounds[0] << " \u2264 x \u2264 " << bounds[1] << ", " //
+         << bounds[2] << " \u2264 y \u2264 " << bounds[3] << ", " //
+         << bounds[4] << " \u2264 z \u2264 " << bounds[5] << "\n\n";
 
   // Camera Info
   vtkCamera* cam = this->GetActiveCamera();
@@ -758,13 +759,13 @@ void vtkF3DRenderer::SetAxesColor(const std::vector<double>& colorXAxis,
 {
   assert(colorXAxis.size() == 3 && colorYAxis.size() == 3 && colorZAxis.size() == 3);
 
-  if (!std::equal(colorXAxis.begin(), colorXAxis.end(), this->ColorAxisX) ||
-    !std::equal(colorYAxis.begin(), colorYAxis.end(), this->ColorAxisY) ||
-    !std::equal(colorZAxis.begin(), colorZAxis.end(), this->ColorAxisZ))
+  if (!std::ranges::equal(colorXAxis, this->ColorAxisX) ||
+    !std::ranges::equal(colorYAxis, this->ColorAxisY) ||
+    !std::ranges::equal(colorZAxis, this->ColorAxisZ))
   {
-    std::copy(colorXAxis.begin(), colorXAxis.end(), this->ColorAxisX);
-    std::copy(colorYAxis.begin(), colorYAxis.end(), this->ColorAxisY);
-    std::copy(colorZAxis.begin(), colorZAxis.end(), this->ColorAxisZ);
+    std::ranges::copy(colorXAxis, this->ColorAxisX);
+    std::ranges::copy(colorYAxis, this->ColorAxisY);
+    std::ranges::copy(colorZAxis, this->ColorAxisZ);
     this->GridConfigured = false;
     this->AxesActorConfigured = false;
   }
