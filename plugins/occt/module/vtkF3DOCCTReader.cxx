@@ -943,7 +943,11 @@ bool vtkF3DOCCTReader::CanReadFile(vtkResourceStream* stream, vtkF3DOCCTReader::
       if (line.find("FILE_SCHEMA") != std::string::npos)
       {
         format = vtkF3DOCCTReader::FILE_FORMAT::STEP;
-        return line.find("AUTOMOTIVE_DESIGN") != std::string::npos;
+        // Exclude IFC schema as this reader is not able to read it.
+        // Other unsupported schema may need to be added if we stumble upon them.
+        std::array unsupportedSchemas = std::to_array<std::string_view>({ "IFC" });
+        return std::ranges::none_of(unsupportedSchemas, [line](const std::string_view& schema)
+          { return line.find(schema) != std::string::npos; });
       }
 
       if (line.find("ENDSEC") != std::string::npos)
